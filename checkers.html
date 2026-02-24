@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>P2P Pro Checkers</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root { --light: #f0d9b5; --dark: #b58863; --gold: #eec27e; }
+        body { background: #1a1a1a; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; height: 100vh; overflow: hidden; }
+        
+        #setup { position: fixed; inset: 0; background: #000; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .btn { background: var(--gold); color: #000; padding: 15px 30px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        input { padding: 15px; border-radius: 8px; border: none; text-align: center; margin-bottom: 10px; width: 220px; }
+
+        #ui { height: 60px; display: flex; align-items: center; justify-content: space-around; width: 100%; border-bottom: 2px solid var(--gold); }
+        #board { display: grid; grid-template-columns: repeat(8, 1fr); width: 90vw; max-width: 450px; height: 90vw; max-height: 450px; border: 5px solid #333; margin-top: 20px; }
+        
+        .sq { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; position: relative; }
+        .lt { background: var(--light); }
+        .dk { background: var(--dark); }
+        
+        .piece { width: 80%; height: 80%; border-radius: 50%; border: 3px solid #000; box-shadow: 0 4px 4px rgba(0,0,0,0.3); cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        .pw { background: #fff; color: #000; } /* White Piece */
+        .pb { background: #f33; color: #fff; } /* Red/Black Piece */
+        .king::after { content: 'K'; font-size: 1.2rem; }
+        
+        .selected { outline: 4px solid #bbcb2b; z-index: 5; }
+        .valid-move { background: rgba(187, 203, 43, 0.5) !important; cursor: pointer; }
+        .back-btn { text-decoration: none; color: #888; font-size: 0.8rem; border: 1px solid #444; padding: 5px 10px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+<div id="setup">
+    <h1 style="color: var(--gold)">CHECKERS P2P</h1>
+    <div id="my-id" style="font-size: 2.2rem; font-weight: bold; margin-bottom: 20px;">...</div>
+    <input type="number" id="join-id" placeholder="Enter Friend's Code">
+    <button class="btn" onclick="connect()">JOIN MATCH</button>
+    <a href="index.html" style="color:#555; margin-top:20px; text-decoration:none;">Back to Hub</a>
+</div>
+
+<div id="ui">
+    <a href="index.html" class="back-btn">⬅ HUB</a>
+    <div id="status" style="color: var(--gold); font-weight: bold;">CONNECTING...</div>
+</div>
+
+<div id="board"></div>
+
+<script>
+    const boardEl = document.getElementById('board');
+    const statusEl = document.getElementById('status');
+    let isMyTurn = false, myCol = 'w', sel = null, conn = null;
+    
+    // Initial State: pw=white, pb=red, kw=king white, kb=king red
+    let state = Array(8).fill().map(() => Array(8).fill(''));
+
+    function initBoard() {
+        for(let r=0; r<8; r++) {
+            for(let c=0; c<8; c++) {
+                if((r+c)%2 !== 0) {
+                    if(r < 3) state[r][c] = 'pb';
+                    if(r > 4) state[r][c] = 'pw';
+                }
+            }
+        }
+    }
+
+    const peer = new Peer(Math.floor(1000 + Math.random() * 9000).toString());
+    peer.on('open', id => document.getElementById('my-id').innerText = id);
+    
+    peer.on('connection', c => { 
+        conn = c; isMyTurn = true; myCol = 'w'; 
+        initBoard(); setupNet(); 
+    });
+
+    function connect() { 
+        conn = peer.connect(document.getElementById('join-id').value); 
+        myCol = 'b'; isTurn = false; 
+        initBoard(); setupNet(); 
+    }
+
+    function setupNet() {
+        conn.on('open', () => { 
+            document.getElementById('setup').style.display = 'none'; 
+            render(); 
+        });
+        conn.on('data', d => { 
+            state = d; 
+            isMyTurn = true; 
+            render(); 
+        });
+    }
+
+    function render() {
+        boardEl.innerHTML = '';
+        statusEl.innerText = isMyTurn ? "★ YOUR TURN ★" : "OPPONENT'S TURN";
+
+        for (let i = 0; i < 64; i++) {
+            let idx = (myCol === 'w') ? i : 63 - i;
+            let r = Math.floor(idx / 8), c = idx % 8;
+            
+            const s = document.createElement('div');
+            s.className = `sq ${(r + c) % 2 === 0 ? 'lt' : 'dk'}`;
+            
+            const p = state[r][c];
+            if (p) {
+                const div = document.createElement('div');
+                div.className = `piece ${p.includes('w') ? 'pw' : 'pb'} ${p.startsWith('k') ? 'king' : ''}`;
+                if (sel && sel.r === r && sel.c === c) div.classList.add('selected');
+                s.appendChild(div);
+            }
+
+            s.onclick = () => {
+                if (!isMyTurn) return;
+                
+                if (sel) {
+                    // Check if move is diagonal
+                    let dr = r - sel.r, dc = c - sel.c;
+                    let dist = Math.abs(dr);
+
+                    if (dist === 1 || dist === 2) {
+                        // Move or Jump
+                        state[r][c] = state[sel.r][sel.c];
+                        state[sel.r][sel.c] = '';
+                        
+                        // If Jump, remove middle piece
+                        if (dist === 2) state[sel.r + dr/2][sel.c + dc/2] = '';
+                        
+                        // Kinging logic
+                        if (myCol === 'w' && r === 0) state[r][c] = 'kw';
+                        if (myCol === 'b' && r === 7) state[r][c] = 'kb';
+
+                        sel = null; isMyTurn = false;
+                        conn.send(state);
+                        render();
+                    } else {
+                        sel = null; render();
+                    }
+                } else if (p && p.includes(myCol)) {
+                    sel = { r, c };
+                    render();
+                }
+            };
+            boardEl.appendChild(s);
+        }
+    }
+</script>
+</body>
+</html>

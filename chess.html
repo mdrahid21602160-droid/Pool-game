@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>P2P Chess</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        body { background: #1a1a1a; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; }
+        #setup { position: fixed; inset: 0; background: #0a0a0a; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        #ui { height: 60px; background: #333; width: 100%; display: flex; justify-content: space-around; align-items: center; border-bottom: 2px solid #eec27e; }
+        #board { display: grid; grid-template-columns: repeat(8, 1fr); width: 90vw; max-width: 480px; height: 90vw; max-height: 480px; border: 4px solid #444; margin-top: 20px; }
+        .sq { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; cursor: pointer; user-select: none; }
+        .lt { background: #f0d9b5; } .dk { background: #b58863; }
+        .selected { background: #bbcb2b !important; }
+        .btn { background: #eec27e; color: #000; padding: 15px 30px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        input { padding: 15px; margin-bottom: 10px; border-radius: 8px; border: none; text-align: center; }
+    </style>
+</head>
+<body>
+    <div id="setup">
+        <h1>PRO CHESS</h1>
+        <div id="my-id" style="font-size: 2.5rem; font-weight: bold; margin-bottom: 20px;">...</div>
+        <input type="number" id="join-id" placeholder="Friend Code">
+        <button class="btn" onclick="connect()">JOIN MATCH</button>
+        <a href="index.html" style="color:#666; margin-top:20px; text-decoration:none;">Back to Hub</a>
+    </div>
+    <div id="ui">
+        <a href="index.html" style="color:white; text-decoration:none; font-size:0.8rem; border:1px solid #666; padding:5px;">HUB</a>
+        <div id="status" style="color:#eec27e; font-weight:bold;">YOUR TURN</div>
+    </div>
+    <div id="board"></div>
+
+    <script>
+        const boardEl = document.getElementById('board');
+        let isMyTurn = false, myCol = 'w', sel = null, conn = null;
+        const pieces = {'rw':'♖','nw':'♘','bw':'♗','qw':'♕','kw':'♔','pw':'♙','rb':'♜','nb':'♞','bb':'♝','qb':'♛','kb':'♚','pb':'♟'};
+        let state = [['rb','nb','bb','qb','kb','bb','nb','rb'],['pb','pb','pb','pb','pb','pb','pb','pb'],['','','','','','','',''],['','','','','','','',''],['','','','','','','',''],['','','','','','','',''],['pw','pw','pw','pw','pw','pw','pw','pw'],['rw','nw','bw','qw','kw','bw','nw','rw']];
+
+        const peer = new Peer(Math.floor(1000 + Math.random() * 9000).toString());
+        peer.on('open', id => document.getElementById('my-id').innerText = id);
+        peer.on('connection', c => { conn = c; isMyTurn = true; myCol = 'w'; initNet(); });
+        function connect() { conn = peer.connect(document.getElementById('join-id').value); isMyTurn = false; myCol = 'b'; initNet(); }
+
+        function initNet() {
+            conn.on('open', () => { document.getElementById('setup').style.display='none'; render(); });
+            conn.on('data', d => { if(d.t==='M'){ state = d.b; isMyTurn = true; render(); }});
+        }
+
+        function render() {
+            boardEl.innerHTML = '';
+            document.getElementById('status').innerText = isMyTurn ? "★ YOUR TURN ★" : "OPPONENT'S TURN";
+            for(let i=0; i<64; i++) {
+                let idx = myCol === 'w' ? i : 63 - i;
+                let r = Math.floor(idx / 8), c = idx % 8;
+                const s = document.createElement('div');
+                s.className = `sq ${(r+c)%2===0?'lt':'dk'}`;
+                const p = state[r][c];
+                if(p) s.innerText = pieces[p];
+                if(sel && sel[0]===r && sel[1]===c) s.classList.add('selected');
+                s.onclick = () => {
+                    if(!isMyTurn) return;
+                    if(sel) {
+                        state[r][c] = state[sel[0]][sel[1]]; state[sel[0]][sel[1]] = '';
+                        sel = null; isMyTurn = false; conn.send({t:'M', b:state}); render();
+                    } else if(p && p.endsWith(myCol)) { sel = [r,c]; render(); }
+                };
+                boardEl.appendChild(s);
+            }
+        }
+    </script>
+</body>
+</html>
