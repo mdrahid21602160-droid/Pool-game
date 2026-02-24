@@ -2,212 +2,167 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>8-Ball Master Sync</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>8-Ball Verified Physics</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        :root { --gold: #eec27e; --felt: #1b7a2b; --wood: #5d3a1a; }
-        body { 
-            background: #000; color: white; font-family: sans-serif; 
-            margin: 0; padding: 0; overflow: hidden; height: 100vh;
-            display: flex; flex-direction: column; align-items: center;
-        }
-        #setup { 
-            position: absolute; z-index: 100; width: 100%; height: 100%;
-            background: rgba(10, 30, 20, 0.98); display: flex; 
-            flex-direction: column; align-items: center; justify-content: center;
-        }
-        canvas { 
-            background: radial-gradient(circle, #239f30, #0a621a);
-            border: 10px solid var(--wood); border-radius: 10px;
-            width: 95vw; height: 47.5vw; max-height: 60vh; touch-action: none;
-        }
-        #status-bar { height: 60px; text-align: center; background: #163a2a; width: 100%; padding-top: 10px; border-bottom: 2px solid var(--gold); }
-        .btn { background: var(--gold); color: #3e2e14; padding: 15px 30px; border: none; border-radius: 8px; font-weight: bold; width: 250px; cursor: pointer; }
-        input { padding: 15px; border-radius: 8px; width: 250px; text-align: center; margin: 10px 0; }
+        body { background: #000; color: white; font-family: system-ui, sans-serif; margin: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; }
+        #setup { position: absolute; z-index: 100; inset: 0; background: #0a1a10; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        #ui { height: 80px; background: #163a2a; width: 100%; border-bottom: 3px solid #eec27e; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        canvas { background: radial-gradient(circle, #239f30, #0a621a); border: 12px solid #5d3a1a; border-radius: 12px; width: 95vw; height: 47.5vw; max-height: 60vh; touch-action: none; margin-top: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .btn { background: #eec27e; color: #3e2e14; padding: 15px 30px; border: none; border-radius: 8px; font-weight: bold; width: 250px; cursor: pointer; margin-top: 15px; font-size: 1rem; }
+        input { padding: 15px; border-radius: 8px; width: 250px; text-align: center; margin-bottom: 10px; font-size: 1.2rem; border: none; }
+        #turn-info { font-size: 1.2rem; font-weight: bold; color: #eec27e; }
     </style>
 </head>
 <body>
 
 <div id="setup">
-    <h1 style="color: var(--gold)">8-BALL SYNC</h1>
-    <div id="my-id" style="font-size: 30px; font-weight: bold; margin-bottom: 20px;">....</div>
+    <h1 style="color: #eec27e; margin-bottom: 5px;">8-BALL MULTIPLAYER</h1>
+    <p style="opacity: 0.7; margin-bottom: 20px;">P2P Low-Latency Sync</p>
+    <div id="my-id" style="font-size: 2rem; margin-bottom: 20px; font-weight: bold; letter-spacing: 2px;">...</div>
     <input type="number" id="join-id" placeholder="Friend's Code">
     <button class="btn" onclick="connect()">JOIN GAME</button>
 </div>
 
-<div id="status-bar">
-    <div id="turn-info" style="color: var(--gold); font-weight: bold;">WAITING FOR CONNECTION</div>
-    <div id="type-info" style="font-size: 12px; opacity: 0.8;">Syncing Live Physics...</div>
+<div id="ui">
+    <div id="turn-info">INITIALIZING...</div>
+    <div id="type-info" style="font-size: 0.8rem; opacity: 0.8; margin-top: 4px;">Waiting for connection</div>
 </div>
 
-<div style="position: relative; margin-top: 10px;">
-    <canvas id="table" width="800" height="400"></canvas>
-</div>
-
-<button id="shoot-btn" class="btn" style="display: none; margin-top: 20px; height: 60px;">🎯 HOLD & DRAG TO AIM</button>
+<canvas id="table" width="800" height="400"></canvas>
 
 <script>
     const canvas = document.getElementById('table');
     const ctx = canvas.getContext('2d');
     const turnInfo = document.getElementById('turn-info');
     const typeInfo = document.getElementById('type-info');
-    const shootBtn = document.getElementById('shoot-btn');
 
-    let balls = [], isMyTurn = false, isMoving = false, myBallType = null;
+    let balls = [], isMyTurn = false, isMoving = false, myType = null;
     const BALL_R = 11;
     const pockets = [{x:0,y:0},{x:400,y:0},{x:800,y:0},{x:0,y:400},{x:400,y:400},{x:800,y:400}];
 
-    // --- Networking ---
     const myShortId = Math.floor(1000 + Math.random() * 9000).toString();
     const peer = new Peer(myShortId);
     let conn = null;
 
-    peer.on('open', id => document.getElementById('my-id').innerText = "YOUR CODE: " + id);
-    peer.on('connection', c => { conn = c; isMyTurn = true; initNet(); });
+    peer.on('open', id => document.getElementById('my-id').innerText = id);
+    peer.on('connection', c => { conn = c; isMyTurn = true; setupNet(); });
+    function connect() { conn = peer.connect(document.getElementById('join-id').value); isMyTurn = false; setupNet(); }
 
-    function connect() { 
-        conn = peer.connect(document.getElementById('join-id').value); 
-        isMyTurn = false; initNet(); 
-    }
-
-    function initNet() {
-        conn.on('open', () => { 
-            document.getElementById('setup').style.display = 'none'; 
-            updateUI(); 
-        });
+    function setupNet() {
+        conn.on('open', () => { document.getElementById('setup').style.display = 'none'; updateUI(); });
         conn.on('data', data => {
-            if (data.type === 'PHYSICS') {
-                // The opponent is sending us the EXACT positions of all balls every frame
-                data.balls.forEach((b, i) => {
-                    balls[i].x = b.x; balls[i].y = b.y;
-                });
-                isMoving = data.isMoving;
-                if (!isMoving) {
-                    isMyTurn = data.nextTurn;
-                    myBallType = data.yourType;
-                    updateUI();
-                }
+            if (data.type === 'STATE') {
+                data.balls.forEach((b, i) => { balls[i].x = b.x; balls[i].y = b.y; });
+                isMoving = data.moving;
+                if (data.swap) { isMyTurn = true; myType = data.yourType; updateUI(); }
             }
         });
     }
 
     function updateUI() {
         turnInfo.innerText = isMyTurn ? "★ YOUR TURN ★" : "OPPONENT'S TURN";
-        typeInfo.innerText = myBallType ? `YOU ARE: ${myBallType.toUpperCase()}S` : "Pocket a ball to claim your type";
-        shootBtn.style.display = (isMyTurn && !isMoving) ? 'block' : 'none';
+        typeInfo.innerText = myType ? `BALLS: ${myType.toUpperCase()}S` : "Pocket any ball to set your type";
     }
 
-    function setupRack() {
-        balls = [{ x: 200, y: 200, vx: 0, vy: 0, color: 'white', type: 'cue' }];
-        let xStart = 550, yStart = 200;
-        for(let col=0; col<5; col++) {
-            for(let row=0; row<=col; row++) {
-                let type = (col === 2 && row === 1) ? '8ball' : ((col+row)%2 === 0 ? 'solid' : 'stripe');
-                let color = type === '8ball' ? 'black' : (type === 'solid' ? '#e63946' : '#f1faee');
-                balls.push({ x: xStart + (col * 22), y: yStart + (row * 24) - (col * 12), vx:0, vy:0, color, type });
+    function initRack() {
+        balls = [{ x: 200, y: 200, vx: 0, vy: 0, color: '#fff', type: 'cue' }];
+        let xS = 550, yS = 200;
+        for(let c=0; c<5; c++) {
+            for(let r=0; r<=c; r++) {
+                let t = (c === 2 && r === 1) ? '8ball' : ((c+r)%2 === 0 ? 'solid' : 'stripe');
+                let clr = t === '8ball' ? '#000' : (t === 'solid' ? '#f33' : '#ff3');
+                balls.push({ x: xS + (c * 21), y: yS + (r * 24) - (c * 12), vx:0, vy:0, color: clr, type: t });
             }
         }
     }
-    setupRack();
+    initRack();
 
-    // --- Input ---
-    let aim = { active: false, x: 0, y: 0 };
+    let drag = { active: false, x1: 0, y1: 0, x2: 0, y2: 0 };
     const getPos = (e) => {
         const r = canvas.getBoundingClientRect();
-        const cx = e.touches ? e.touches[0].clientX : e.clientX;
-        const cy = e.touches ? e.touches[0].clientY : e.clientY;
+        const cx = (e.touches ? e.touches[0].clientX : e.clientX);
+        const cy = (e.touches ? e.touches[0].clientY : e.clientY);
         return { x: (cx - r.left) * (800 / r.width), y: (cy - r.top) * (400 / r.height) };
     };
 
-    shootBtn.onmousedown = shootBtn.ontouchstart = () => { if(isMyTurn && !isMoving) aim.active = true; };
-    window.onmousemove = window.ontouchmove = (e) => { if(aim.active) { const p = getPos(e); aim.x = p.x; aim.y = p.y; } };
+    canvas.onmousedown = canvas.ontouchstart = (e) => { 
+        if(isMyTurn && !isMoving) { drag.active = true; const p = getPos(e); drag.x1 = p.x; drag.y1 = p.y; drag.x2 = p.x; drag.y2 = p.y; } 
+    };
+    window.onmousemove = window.ontouchmove = (e) => { 
+        if(drag.active) { const p = getPos(e); drag.x2 = p.x; drag.y2 = p.y; } 
+    };
     window.onmouseup = window.ontouchend = () => {
-        if(!aim.active) return;
-        const dx = balls[0].x - aim.x, dy = balls[0].y - aim.y;
-        const dist = Math.hypot(dx, dy);
-        const p = Math.min(dist / 10, 20);
-        balls[0].vx = (dx/dist)*p; balls[0].vy = (dy/dist)*p;
-        aim.active = false; isMoving = true; updateUI();
+        if(!drag.active) return;
+        const dx = drag.x1 - drag.x2, dy = drag.y1 - drag.y2;
+        const pwr = Math.min(Math.hypot(dx, dy) / 8, 22);
+        const ang = Math.atan2(dy, dx);
+        balls[0].vx = Math.cos(ang) * pwr; balls[0].vy = Math.sin(ang) * pwr;
+        drag.active = false; isMoving = true;
     };
 
-    // --- Physics & Render ---
-    function loop() {
-        if (isMyTurn || !conn) { 
-            // ONLY the person whose turn it is calculates the math
-            let movingThisFrame = false;
+    function update() {
+        if (isMyTurn) {
+            let moving = false;
             balls.forEach((b, i) => {
-                if(b.x < -20) return;
+                if (b.x < -20) return;
                 b.x += b.vx; b.y += b.vy;
-                b.vx *= 0.985; b.vy *= 0.985;
-                if(Math.hypot(b.vx, b.vy) > 0.1) movingThisFrame = true; else { b.vx = 0; b.vy = 0; }
+                b.vx *= 0.988; b.vy *= 0.988;
+                if (Math.hypot(b.vx, b.vy) > 0.15) moving = true; else { b.vx = 0; b.vy = 0; }
 
-                // Wall Collisions
-                if(b.x < BALL_R || b.x > 800-BALL_R) { b.vx *= -0.8; b.x = b.x < BALL_R ? BALL_R : 800-BALL_R; }
-                if(b.y < BALL_R || b.y > 400-BALL_R) { b.vy *= -0.8; b.y = b.y < BALL_R ? BALL_R : 400-BALL_R; }
+                if(b.x < BALL_R || b.x > 800-BALL_R) { b.vx *= -0.75; b.x = b.x < BALL_R ? BALL_R : 800-BALL_R; }
+                if(b.y < BALL_R || b.y > 400-BALL_R) { b.vy *= -0.75; b.y = b.y < BALL_R ? BALL_R : 400-BALL_R; }
 
-                // Ball Collisions
-                for(let j=i+1; j<balls.length; j++) {
+                for(let j=i+1; j<balls.length; j++){
                     let b2 = balls[j]; if(b2.x < -20) continue;
-                    let dx = b2.x-b.x, dy = b2.y-b.y, d = Math.hypot(dx,dy);
-                    if(d < BALL_R*2) {
-                        let nx = dx/d, ny = dy/d, overlap = BALL_R*2-d;
-                        b.x -= nx*overlap/2; b.y -= ny*overlap/2;
-                        b2.x += nx*overlap/2; b2.y += ny*overlap/2;
+                    let dx = b2.x-b.x, dy = b2.y-b.y, d = Math.hypot(dx, dy);
+                    if(d < BALL_R*2){
+                        let nx = dx/d, ny = dy/d, ov = (BALL_R*2-d);
+                        b.x -= nx*ov/2; b.y -= ny*ov/2; b2.x += nx*ov/2; b2.y += ny*ov/2;
                         let v1n = b.vx*nx + b.vy*ny, v2n = b2.vx*nx + b2.vy*ny;
-                        b.vx += (v2n-v1n)*nx; b.vy += (v1n-v2n)*nx;
-                        b.vy += (v2n-v1n)*ny; b2.vy += (v1n-v2n)*ny;
+                        b.vx += (v2n-v1n)*nx; b.vy += (v2n-v1n)*ny;
+                        b2.vx += (v1n-v2n)*nx; b2.vy += (v1n-v2n)*ny;
                     }
                 }
-                // Pockets
                 pockets.forEach(p => {
                     if(Math.hypot(b.x-p.x, b.y-p.y) < 25) {
                         if(b.type === 'cue') { b.x=200; b.y=200; b.vx=0; b.vy=0; }
-                        else {
-                            if(!myBallType && b.type !== '8ball') myBallType = b.type;
-                            b.x = -100; b.vx = 0; b.vy = 0;
-                        }
+                        else if(b.type === '8ball') { alert(myType ? "GAME OVER" : "8-BALL SUNK EARLY!"); location.reload(); }
+                        else { if(!myType) myType = b.type; b.x = -100; b.vx = 0; b.vy = 0; }
                     }
                 });
             });
 
-            // BROADCAST results to opponent
             if (conn && conn.open) {
-                let opType = myBallType === 'solid' ? 'stripe' : (myBallType === 'stripe' ? 'solid' : null);
-                conn.send({
-                    type: 'PHYSICS',
-                    balls: balls.map(b => ({x: b.x, y: b.y})),
-                    isMoving: movingThisFrame,
-                    nextTurn: movingThisFrame ? false : false, // Keep it false until stopped
-                    yourType: opType
-                });
-
-                if (isMoving && !movingThisFrame) {
-                    isMoving = false;
-                    isMyTurn = false;
-                    conn.send({ type: 'PHYSICS', balls: balls.map(b => ({x: b.x, y: b.y})), isMoving: false, nextTurn: true, yourType: opType });
-                    updateUI();
-                }
+                let swap = (isMoving && !moving);
+                let opT = myType === 'solid' ? 'stripe' : (myType === 'stripe' ? 'solid' : null);
+                conn.send({ type: 'STATE', balls: balls.map(b=>({x:b.x, y:b.y})), moving, swap, yourType: opT });
+                if(swap) { isMyTurn = false; isMoving = false; updateUI(); }
             }
-            isMoving = movingThisFrame;
+            isMoving = moving;
         }
 
-        // Render Frame
         ctx.clearRect(0,0,800,400);
-        ctx.fillStyle = '#000';
-        pockets.forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, 25, 0, 7); ctx.fill(); });
+        pockets.forEach(p => { ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(p.x, p.y, 25, 0, 7); ctx.fill(); });
         balls.forEach(b => {
             if(b.x < 0) return;
-            ctx.fillStyle = b.color;
-            ctx.beginPath(); ctx.arc(b.x, b.y, BALL_R, 0, 7); ctx.fill();
-            if(b.type === 'stripe') { ctx.strokeStyle = "white"; ctx.lineWidth = 3; ctx.stroke(); }
+            ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(b.x, b.y, BALL_R, 0, 7); ctx.fill();
+            if(b.type === 'stripe') { 
+                ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.stroke();
+                ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, 7); ctx.fill();
+            }
         });
-        if(aim.active && isMyTurn) {
-            ctx.strokeStyle = "white"; ctx.beginPath(); ctx.moveTo(balls[0].x, balls[0].y); ctx.lineTo(aim.x, aim.y); ctx.stroke();
+
+        if(drag.active) {
+            ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.setLineDash([5,5]);
+            ctx.beginPath(); ctx.moveTo(balls[0].x, balls[0].y);
+            ctx.lineTo(balls[0].x + (drag.x1 - drag.x2), balls[0].y + (drag.y1 - drag.y2)); ctx.stroke();
+            ctx.setLineDash([]);
         }
-        requestAnimationFrame(loop);
+        requestAnimationFrame(update);
     }
-    loop();
+    update();
 </script>
 </body>
 </html>
