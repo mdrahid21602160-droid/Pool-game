@@ -3,189 +3,166 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>8-Ball Pro Mobile</title>
+    <title>8-Ball Fullscreen</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        :root { --gold: #eec27e; --felt: #1b7a2b; --wood: #7b5e38; }
-        * { user-select: none; -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
-        body {
-            background: #0f261a; margin: 0; display: flex; flex-direction: column;
-            align-items: center; font-family: -apple-system, sans-serif; height: 100vh; 
-            overflow: hidden; touch-action: none; color: white;
+        :root { --gold: #eec27e; --felt: #1b7a2b; --wood: #5d3a1a; }
+        body { 
+            background: #000; color: white; font-family: sans-serif; 
+            margin: 0; padding: 0; overflow: hidden; height: 100vh;
+            display: flex; flex-direction: column;
         }
-        .menu-card {
-            background: #163a2a; border: 2px solid var(--gold); border-radius: 15px;
-            padding: 20px; width: 90%; max-width: 400px; margin-top: 20px; text-align: center;
+        #setup { 
+            position: absolute; z-index: 10; width: 100%; height: 100%;
+            background: rgba(15, 38, 26, 0.95); display: flex; 
+            flex-direction: column; align-items: center; justify-content: center;
         }
-        .id-display {
-            font-size: 32px; font-weight: bold; background: #000; color: #fff;
-            padding: 10px; border-radius: 8px; display: inline-block; margin: 10px 0;
-            letter-spacing: 4px; border: 1px solid var(--gold);
-        }
-        canvas {
+        .id-box { font-size: 40px; font-weight: bold; color: var(--gold); margin: 10px 0; }
+        canvas { 
             background: radial-gradient(circle, #239f30, #0a621a);
-            border: 8px solid var(--wood); border-radius: 15px;
-            width: 95%; height: auto; margin-top: 10px; display: none;
+            border: 6px solid var(--wood); box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            width: 100vw; height: 50vw; max-height: 90vh; touch-action: none;
         }
-        .btn {
-            background: var(--gold); color: #3e2e14; padding: 15px; border: none;
-            border-radius: 8px; font-weight: bold; font-size: 18px; width: 100%; cursor: pointer;
-        }
-        input {
-            padding: 15px; border-radius: 8px; border: none; width: 100%;
-            font-size: 20px; text-align: center; margin: 10px 0; background: #fff; color: #000;
-        }
-        #status { color: var(--gold); font-weight: bold; margin: 10px; text-transform: uppercase; }
-        .foul-alert { animation: flash 1s infinite; color: #ff4757; }
-        @keyframes flash { 50% { opacity: 0.5; } }
+        #status-bar { height: 40px; line-height: 40px; font-weight: bold; color: var(--gold); text-align: center; background: #163a2a; width: 100%; }
+        .btn { background: var(--gold); color: #3e2e14; padding: 15px 30px; border: none; border-radius: 8px; font-weight: bold; font-size: 18px; width: 80%; max-width: 300px; margin-top: 10px; }
+        input { padding: 15px; border-radius: 8px; width: 80%; max-width: 300px; text-align: center; font-size: 20px; border: none; margin: 10px 0; }
     </style>
 </head>
 <body>
 
-    <div id="login-screen" class="menu-card">
-        <div>YOUR GAME CODE</div>
-        <div class="id-display" id="my-id">....</div>
-        <p id="net-status">CONNECTING TO SERVER...</p>
-        <hr style="opacity:0.2; margin: 20px 0;">
-        <input type="number" id="join-id" placeholder="ENTER 4-DIGIT CODE" pattern="\d*">
-        <button class="btn" onclick="connect()">JOIN FRIEND</button>
-    </div>
+<div id="setup">
+    <div style="font-size: 18px;">YOUR GAME CODE:</div>
+    <div id="my-id" class="id-box">....</div>
+    <input type="number" id="join-id" placeholder="Enter Friend's Code">
+    <button class="btn" onclick="connect()">JOIN GAME</button>
+</div>
 
-    <div id="game-ui" style="display:none; width:100%; text-align:center;">
-        <div id="status">YOUR TURN</div>
-        <canvas id="poolTable" width="800" height="400"></canvas>
-        <button id="shootBtn" class="btn" style="width:80%; margin-top:15px;">🎯 SHOOT</button>
-    </div>
+<div id="status-bar">WAITING FOR CONNECTION...</div>
+<canvas id="table" width="800" height="400"></canvas>
+<div style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
+    <button id="shoot-btn" class="btn" style="height: 70px; display: none;">🎯 SHOOT</button>
+</div>
 
 <script>
-    const canvas = document.getElementById('poolTable');
+    const canvas = document.getElementById('table');
     const ctx = canvas.getContext('2d');
-    const statusEl = document.getElementById('status');
-    const shootBtn = document.getElementById('shootBtn');
+    const statusBar = document.getElementById('status-bar');
+    const shootBtn = document.getElementById('shoot-btn');
 
-    // Generate 4-digit ID
+    // Peer Connection
     const myShortId = Math.floor(1000 + Math.random() * 9000).toString();
     const peer = new Peer(myShortId);
-    let conn = null;
-    let isMyTurn = false;
-    let ballInHand = false;
+    let conn = null, isMyTurn = false;
 
-    peer.on('open', id => {
-        document.getElementById('my-id').innerText = id;
-        document.getElementById('net-status').innerText = "READY TO CONNECT";
-    });
-
-    peer.on('error', () => location.reload()); // Simple fix for ID collisions
-
-    peer.on('connection', c => {
-        conn = c;
-        isMyTurn = true;
-        start();
-    });
-
-    function connect() {
+    peer.on('open', id => document.getElementById('my-id').innerText = id);
+    peer.on('connection', c => { conn = c; isMyTurn = true; initGame(); });
+    
+    function connect() { 
         const id = document.getElementById('join-id').value;
-        if(id.length !== 4) return alert("Enter 4 numbers");
-        conn = peer.connect(id);
-        isMyTurn = false;
-        start();
+        conn = peer.connect(id); 
+        isMyTurn = false; initGame(); 
     }
 
-    function start() {
+    function initGame() {
         conn.on('open', () => {
-            document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('game-ui').style.display = 'block';
-            canvas.style.display = 'block';
-            updateUI();
+            document.getElementById('setup').style.display = 'none';
+            shootBtn.style.display = 'block';
+            updateTurnText();
         });
         conn.on('data', data => {
             if(data.type === 'SHOT') {
                 balls[0].vx = data.vx; balls[0].vy = data.vy;
-                isMyTurn = true;
-            } else if(data.type === 'FOUL') {
-                ballInHand = true; isMyTurn = true;
+                isMyTurn = true; updateTurnText();
             }
-            updateUI();
         });
     }
 
-    function updateUI() {
-        if (ballInHand) {
-            statusEl.innerText = "FOUL! DRAG WHITE BALL";
-            statusEl.className = "foul-alert";
-        } else {
-            statusEl.innerText = isMyTurn ? "YOUR TURN" : "FRIEND'S TURN";
-            statusEl.className = "";
+    function updateTurnText() { statusBar.innerText = isMyTurn ? "★ YOUR TURN ★" : "OPPONENT'S TURN"; }
+
+    // Game Objects
+    const BALL_R = 11;
+    let balls = [];
+    const pockets = [{x:0,y:0},{x:400,y:0},{x:800,y:0},{x:0,y:400},{x:400,y:400},{x:800,y:400}];
+
+    function setupRack() {
+        balls = [{ x: 200, y: 200, vx: 0, vy: 0, color: 'white' }]; // Cue Ball
+        let xStart = 550, yStart = 200, spacing = 24;
+        for(let col=0; col<5; col++) {
+            for(let row=0; row<=col; row++) {
+                let color = (col === 2 && row === 1) ? 'black' : ( (col+row) % 2 === 0 ? '#ff3e3e' : '#ffea00');
+                balls.push({ x: xStart + (col * 20), y: yStart + (row * spacing) - (col * spacing/2), vx:0, vy:0, color: color });
+            }
         }
-        shootBtn.disabled = !isMyTurn || ballInHand;
     }
+    setupRack();
 
-    // Physics & Balls
-    let balls = [{ x: 200, y: 200, vx: 0, vy: 0, color: 'white' }];
-    for(let i=0; i<5; i++) balls.push({x: 500+i*15, y: 150+i*20, vx:0, vy:0, color: 'gold'});
-
+    // Interaction
     let aim = { active: false, x: 0, y: 0 };
-
-    canvas.addEventListener('touchstart', e => {
-        if(!isMyTurn) return;
-        aim.active = true;
-    }, {passive: false});
-
+    canvas.addEventListener('touchstart', e => { if(isMyTurn) aim.active = true; e.preventDefault(); }, {passive: false});
     canvas.addEventListener('touchmove', e => {
         if(!aim.active) return;
         const r = canvas.getBoundingClientRect();
-        const tx = (e.touches[0].clientX - r.left) * (800 / r.width);
-        const ty = (e.touches[0].clientY - r.top) * (400 / r.height);
-
-        if (ballInHand) {
-            balls[0].x = tx; balls[0].y = ty;
-        } else {
-            aim.x = tx; aim.y = ty;
-        }
+        aim.x = (e.touches[0].clientX - r.left) * (800 / r.width);
+        aim.y = (e.touches[0].clientY - r.top) * (400 / r.height);
         e.preventDefault();
     }, {passive: false});
 
-    canvas.addEventListener('touchend', () => {
-        if (ballInHand) {
-            ballInHand = false;
-            updateUI();
-        }
-    });
-
     shootBtn.onclick = () => {
+        if(!aim.active || !isMyTurn) return;
         const dx = aim.x - balls[0].x, dy = aim.y - balls[0].y;
         const dist = Math.hypot(dx, dy);
-        const vx = (dx / dist) * 12, vy = (dy / dist) * 12;
+        const vx = (dx / dist) * 16, vy = (dy / dist) * 16;
         balls[0].vx = vx; balls[0].vy = vy;
-        if(conn) conn.send({type: 'SHOT', vx, vy});
-        isMyTurn = false; aim.active = false;
-        updateUI();
+        if(conn) conn.send({ type: 'SHOT', vx, vy });
+        isMyTurn = false; aim.active = false; updateTurnText();
     };
 
-    function loop() {
-        ctx.clearRect(0, 0, 800, 400);
-        balls.forEach(b => {
+    function gameLoop() {
+        ctx.clearRect(0,0,800,400);
+        
+        // Pockets
+        ctx.fillStyle = '#000';
+        pockets.forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, 25, 0, 7); ctx.fill(); });
+
+        balls.forEach((b, i) => {
             b.x += b.vx; b.y += b.vy; b.vx *= 0.985; b.vy *= 0.985;
-            if(b.x < 12 || b.x > 788) b.vx *= -1;
-            if(b.y < 12 || b.y > 388) b.vy *= -1;
-            
-            // Basic Scratch Logic
-            if(b.color === 'white' && (b.x < 15 && b.y < 15)) { // Pocket simulation
-                b.x = 200; b.y = 200; b.vx = 0; b.vy = 0;
-                if(conn) conn.send({type: 'FOUL'});
+
+            // Bounce
+            if(b.x < BALL_R || b.x > 800-BALL_R) b.vx *= -0.8;
+            if(b.y < BALL_R || b.y > 400-BALL_R) b.vy *= -0.8;
+
+            // Collision
+            for(let j=i+1; j<balls.length; j++) {
+                let b2 = balls[j];
+                let dx = b2.x - b.x, dy = b2.y - b.y;
+                if(Math.hypot(dx, dy) < BALL_R*2) {
+                    let angle = Math.atan2(dy, dx);
+                    let tx = b.vx; b.vx = b2.vx; b2.vx = tx;
+                    let ty = b.vy; b.vy = b2.vy; b2.vy = ty;
+                }
             }
 
-            ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(b.x, b.y, 12, 0, 7); ctx.fill();
+            // Pocketing
+            pockets.forEach(p => {
+                if(Math.hypot(b.x-p.x, b.y-p.y) < 25) {
+                    if(i === 0) { b.x=200; b.y=200; b.vx=0; b.vy=0; }
+                    else { b.x = -100; b.vx=0; b.vy=0; }
+                }
+            });
+
+            ctx.fillStyle = b.color;
+            ctx.beginPath(); ctx.arc(b.x, b.y, BALL_R, 0, 7); ctx.fill();
+            ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.stroke();
         });
 
-        if(aim.active && isMyTurn && !ballInHand) {
+        if(aim.active && isMyTurn) {
             ctx.strokeStyle = "white"; ctx.setLineDash([5, 5]);
             ctx.beginPath(); ctx.moveTo(balls[0].x, balls[0].y); ctx.lineTo(aim.x, aim.y); ctx.stroke();
             ctx.setLineDash([]);
         }
-        requestAnimationFrame(loop);
+        requestAnimationFrame(gameLoop);
     }
-    loop();
+    gameLoop();
 </script>
 </body>
 </html>
