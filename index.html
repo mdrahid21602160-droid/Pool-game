@@ -1,0 +1,1300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="manifest.json">
+    <title>8-Ball Pro Multiplayer</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root { --gold: #eec27e; --felt: #1b7a2b; --wood: #7b5e38; }
+        * { user-select: none; -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+        body {
+            background: #0f261a; margin: 0; display: flex; flex-direction: column;
+            align-items: center; font-family: sans-serif; height: 100vh; overflow: hidden;
+            touch-action: none; color: white;
+        }
+
+        /* Portrait Warning */
+        @media screen and (orientation: portrait) { #portrait-gate { display: flex; } }
+        #portrait-gate {
+            display: none; position: fixed; inset: 0; background: #1a3a2a; color: white;
+            z-index: 9999; flex-direction: column; justify-content: center; align-items: center; text-align: center;
+        }
+
+        #ui-top {
+            background: rgba(0,0,0,0.85); width: 100%; padding: 10px 20px;
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 2px solid var(--wood); font-size: 14px;
+        }
+        .btn {
+            border: none; padding: 10px 18px; border-radius: 8px; font-weight: bold;
+            cursor: pointer; transition: transform 0.1s;
+        }
+        .btn-gold { background: var(--gold); color: #3e2e14; }
+        .btn-share { background: #007aff; color: white; }
+
+        .game-area {
+            flex-grow: 1; display: flex; flex-direction: column; justify-content: center;
+            align-items: center; width: 95%; max-width: 850px;
+        }
+        canvas {
+            background: radial-gradient(circle, #239f30, #0a621a);
+            border: 12px solid var(--wood); border-radius: 24px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8); width: 100%; height: auto;
+        }
+        #status-bar { margin: 10px 0; color: var(--gold); font-weight: bold; text-transform: uppercase; }
+        
+        #power-meter {
+            width: 100%; height: 8px; background: #222; margin-top: 10px;
+            border-radius: 4px; overflow: hidden; display: none;
+        }
+        #power-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #2ecc71, #f1c40f, #e74c3c); }
+
+        #overlay {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9);
+            z-index: 10000; flex-direction: column; justify-content: center; align-items: center;
+        }
+    </style>
+</head>
+<body>
+
+<div id="portrait-gate"><h2>🔄 Rotate to Landscape</h2><p>Please use landscape mode to play.</p></div>
+
+<div id="ui-top">
+    <div>ID: <strong id="my-id">...</strong> <button class="btn btn-share" onclick="shareID()" style="padding:4px 8px; font-size:10px">SHARE</button></div>
+    <div id="conn-controls">
+        <input type="text" id="peer-id" placeholder="Friend's ID" style="padding:8px; border-radius:4px; border:none;">
+        <button class="btn btn-gold" onclick="connectToPeer()">JOIN</button>
+    </div>
+    <div id="connected-ui" style="display:none; color:#2ecc71; font-weight:bold">● CONNECTED</div>
+</div>
+
+<div class="game-area">
+    <div id="status-bar">Initialize Peer to Start...</div>
+    <canvas id="poolTable" width="800" height="400"></canvas>
+    <div id="power-meter"><div id="power-bar"></div></div>
+    <div style="margin-top:15px; display:flex; gap:15px;">
+        <button id="shootBtn" class="btn btn-gold" style="width:160px; height:50px; font-size:18px" disabled>🎯 SHOOT</button>
+        <button onclick="location.reload()" class="btn" style="background:#444; color:white">NEW GAME</button>
+    </div>
+</div>
+
+<div id="overlay">
+    <h1 id="res-title" style="font-size:3rem"></h1>
+    <p id="res-reason" style="margin-bottom:20px"></p>
+    <button class="btn btn-gold" onclick="location.reload()">PLAY AGAIN</button>
+</div>
+
+<script>
+    const canvas = document.getElementById('poolTable');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('status-bar');
+    const shootBtn = document.getElementById('shootBtn');
+    const powerBar = document.getElementById('power-bar');
+
+    // --- NETWORKING LOGIC ---
+    let peer = new Peer();
+    let conn = null;
+    let isMyTurn = false;
+    let ballInHand = false;
+
+    peer.on('open', id => {
+        document.getElementById('my-id').innerText = id;
+        statusEl.innerText = "READY. SEND ID TO FRIEND.";
+    });
+
+    peer.on('connection', c => {
+        conn = c; 
+        isMyTurn = true; 
+        setupNet();
+    });
+
+    function connectToPeer() {
+        const id = document.getElementById('peer-id').value;
+        if(id) {
+            conn = peer.connect(id);
+            isMyTurn = false;
+            setupNet();
+        }
+    }
+
+    function setupNet() {
+        conn.on('open', () => {
+            document.getElementById('conn-controls').style.display = 'none';
+            document.getElementById('connected-ui').style.display = 'block';
+            updateTurnUI();
+        });
+        conn.on('data', data => {
+            if(data.type === 'SHOT') {
+                const cue = balls.find(b => b.cue);
+                cue.vx = data.vx; cue.vy = data.vy;
+                if(data.balls) syncBalls(data.balls);
+                isMyTurn = true;
+                updateTurnUI();
+            } else if(data.type === 'DRAG') {
+                const cue = balls.find(b => b.cue);
+                cue.x = data.x; cue.y = data.y;
+            } else if(data.type === 'FOUL') {
+                ballInHand = true; isMyTurn = true;
+                statusEl.innerText = "FOUL! DRAG WHITE BALL";
+            } else if(data.type === 'WIN') {
+                showEnd(data.win ? 'peer' : 'me', "8-Ball Potted");
+            }
+        });
+    }
+
+    function shareID() {
+        const id = document.getElementById('my-id').innerText;
+        if(navigator.share) navigator.share({title:'8-Ball Pool', text: id});
+        else { navigator.clipboard.writeText(id); alert("ID Copied to clipboard!"); }
+    }
+
+    // --- PHYSICS ENGINE ---
+    const BALL_R = 12;
+    const FRICTION = 0.985;
+    const POCKETS = [{x:0,y:0},{x:400,y:0},{x:800,y:0},{x:0,y:400},{x:400,y:400},{x:800,y:400}];
+    let balls = [];
+    let aiming = { active: false, x:0, y:0, power:0, dragging: false };
+
+    function initTable() {
+        balls = [{ x: 200, y: 200, vx: 0, vy: 0, color: '#fff', cue: true }];
+        let id = 1;
+        for(let r=0; r<5; r++) {
+            for(let i=0; i<=r; i++) {
+                balls.push({
+                    x: 550 + (r * 23), y: 200 - (r * 13) + (i * 26),
+                    vx: 0, vy: 0, color: id===8 ? '#000' : `hsl(${id*45},70%,50%)`,
+                    id: id++
+                });
+            }
+        }
+    }
+
+    function syncBalls(s) {
+        balls.forEach((b, i) => { if(s[i]){ b.x = s[i].x; b.y = s[i].y; }});
+    }
+
+    // --- MOBILE INTERACTION ---
+    function getPtr(e) {
+        const r = canvas.getBoundingClientRect();
+        const ex = e.touches ? e.touches[0].clientX : e.clientX;
+        const ey = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: (ex - r.left) * (800 / r.width), y: (ey - r.top) * (400 / r.height) };
+    }
+
+    canvas.addEventListener('mousedown', e => handleStart(getPtr(e)));
+    canvas.addEventListener('touchstart', e => { handleStart(getPtr(e)); e.preventDefault(); }, {passive:false});
+
+    function handleStart(p) {
+        if(!isMyTurn || isMoving()) return;
+        const cue = balls.find(b => b.cue);
+        const d = Math.hypot(p.x - cue.x, p.y - cue.y);
+        if(ballInHand && d < 40) aiming.dragging = true;
+        else if(d < 40) {
+            aiming.active = true;
+            document.getElementById('power-meter').style.display = 'block';
+        }
+    }
+
+    window.addEventListener('mousemove', e => handleMove(getPtr(e)));
+    window.addEventListener('touchmove', e => { handleMove(getPtr(e)); e.preventDefault(); }, {passive:false});
+
+    function handleMove(p) {
+        const cue = balls.find(b => b.cue);
+        if(aiming.dragging) {
+            cue.x = Math.max(20, Math.min(780, p.x));
+            cue.y = Math.max(20, Math.min(380, p.y));
+            if(conn) conn.send({type:'DRAG', x:cue.x, y:cue.y});
+        } else if(aiming.active) {
+            aiming.x = p.x; aiming.y = p.y;
+            const dist = Math.hypot(p.x - cue.x, p.y - cue.y);
+            aiming.power = Math.min(dist * 0.8, 100);
+            powerBar.style.width = aiming.power + '%';
+            shootBtn.disabled = false;
+        }
+    }
+
+    window.addEventListener('mouseup', () => { aiming.active = aiming.dragging = false; ballInHand = false; });
+    window.addEventListener('touchend', () => { aiming.active = aiming.dragging = false; ballInHand = false; });
+
+    shootBtn.onclick = () => {
+        const cue = balls.find(b => b.cue);
+        const dx = aiming.x - cue.x, dy = aiming.y - cue.y;
+        const d = Math.hypot(dx, dy);
+        const vx = (dx/d) * (aiming.power/7), vy = (dy/d) * (aiming.power/7);
+        cue.vx = vx; cue.vy = vy;
+        if(conn) conn.send({type:'SHOT', vx, vy, balls});
+        isMyTurn = false; shootBtn.disabled = true;
+        document.getElementById('power-meter').style.display = 'none';
+        updateTurnUI();
+    };
+
+    // --- GAME LOOP ---
+    function isMoving() { return balls.some(b => Math.abs(b.vx) > 0.1); }
+    function updateTurnUI() { statusEl.innerText = isMyTurn ? "🟢 YOUR TURN" : "🔴 PEER TURN"; }
+
+    function showEnd(winner, reason) {
+        const o = document.getElementById('overlay');
+        document.getElementById('res-title').innerText = winner === 'me' ? "WINNER!" : "DEFEAT";
+        document.getElementById('res-reason').innerText = reason;
+        o.style.display = 'flex';
+    }
+
+    function update() {
+        balls.forEach(b => {
+            b.x += b.vx; b.y += b.vy; b.vx *= FRICTION; b.vy *= FRICTION;
+            if(b.x < BALL_R || b.x > 800-BALL_R) b.vx *= -0.8;
+            if(b.y < BALL_R || b.y > 400-BALL_R) b.vy *= -0.8;
+        });
+
+        // Collision logic
+        
+        for(let i=0; i<balls.length; i++) {
+            for(let j=i+1; j<balls.length; j++) {
+                const b1 = balls[i], b2 = balls[j];
+                const dx = b2.x-b1.x, dy = b2.y-b1.y, dist = Math.hypot(dx,dy);
+                if(dist < BALL_R*2) {
+                    const angle = Math.atan2(dy, dx), sin = Math.sin(angle), cos = Math.cos(angle);
+                    const v1 = b1.vx*cos + b1.vy*sin, v2 = b2.vx*cos + b2.vy*sin;
+                    b1.vx = v2*cos - b1.vy*sin; b1.vy = v2*sin + b1.vy*cos;
+                    b2.vx = v1*cos - b2.vy*sin; b2.vy = v1*sin + b2.vy*cos;
+                    const overlap = (BALL_R*2-dist)/2;
+                    b1.x -= overlap*cos; b1.y -= overlap*sin; b2.x += overlap*cos; b2.y += overlap*sin;
+                }
+            }
+        }
+
+        POCKETS.forEach(p => {
+            balls = balls.filter(b => {
+                if(Math.hypot(b.x-p.x, b.y-p.y) < 26) {
+                    if(b.cue) { 
+                        b.x=200; b.y=200; b.vx=0; b.vy=0; 
+                        if(conn) conn.send({type:'FOUL'});
+                        statusEl.innerText = "SCRATCH!"; return true; 
+                    }
+                    if(b.color==='#000') {
+                        const win = balls.length <= 3;
+                        showEnd(win ? (isMyTurn ? 'peer' : 'me') : (isMyTurn ? 'me' : 'peer'), "8-Ball Potted");
+                        if(conn) conn.send({type:'WIN', win: !win});
+                    }
+                    return false;
+                }
+                return true;
+            });
+        });
+    }
+
+    function draw() {
+        ctx.clearRect(0,0,800,400);
+        ctx.fillStyle = '#111';
+        POCKETS.forEach(p => { ctx.beginPath(); ctx.arc(p.x,p.y,25,0,7); ctx.fill(); });
+        
+        const cue = balls.find(b => b.cue);
+        if(isMyTurn && !isMoving()) {
+            if(ballInHand) {
+                ctx.strokeStyle = 'white'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(cue.x, cue.y, 20, 0, 7); ctx.stroke();
+            } else if(aiming.active) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.setLineDash([5,5]);
+                ctx.beginPath(); ctx.moveTo(cue.x, cue.y); ctx.lineTo(aiming.x, aiming.y); ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+
+        balls.forEach(b => {
+            ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(b.x, b.y, BALL_R, 0, 7); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.beginPath(); ctx.arc(b.x-4,b.y-4,3,0,7); ctx.fill();
+        });
+    }
+
+    // PWA Service Worker Registration
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js').then(reg => {
+                console.log('SW Registered');
+            }).catch(err => console.log('SW Failed', err));
+        });
+    }
+
+    function loop() { update(); draw(); requestAnimationFrame(loop); }
+    initTable(); loop();
+</script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="manifest.json">
+    <title>8-Ball Pro Multiplayer</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root { --gold: #eec27e; --felt: #1b7a2b; --wood: #7b5e38; }
+        * { user-select: none; -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+        body {
+            background: #0f261a; margin: 0; display: flex; flex-direction: column;
+            align-items: center; font-family: sans-serif; height: 100vh; overflow: hidden;
+            touch-action: none; color: white;
+        }
+
+        /* Portrait Warning */
+        @media screen and (orientation: portrait) { #portrait-gate { display: flex; } }
+        #portrait-gate {
+            display: none; position: fixed; inset: 0; background: #1a3a2a; color: white;
+            z-index: 9999; flex-direction: column; justify-content: center; align-items: center; text-align: center;
+        }
+
+        #ui-top {
+            background: rgba(0,0,0,0.85); width: 100%; padding: 10px 20px;
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 2px solid var(--wood); font-size: 14px;
+        }
+        .btn {
+            border: none; padding: 10px 18px; border-radius: 8px; font-weight: bold;
+            cursor: pointer; transition: transform 0.1s;
+        }
+        .btn-gold { background: var(--gold); color: #3e2e14; }
+        .btn-share { background: #007aff; color: white; }
+
+        .game-area {
+            flex-grow: 1; display: flex; flex-direction: column; justify-content: center;
+            align-items: center; width: 95%; max-width: 850px;
+        }
+        canvas {
+            background: radial-gradient(circle, #239f30, #0a621a);
+            border: 12px solid var(--wood); border-radius: 24px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8); width: 100%; height: auto;
+        }
+        #status-bar { margin: 10px 0; color: var(--gold); font-weight: bold; text-transform: uppercase; }
+        
+        #power-meter {
+            width: 100%; height: 8px; background: #222; margin-top: 10px;
+            border-radius: 4px; overflow: hidden; display: none;
+        }
+        #power-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #2ecc71, #f1c40f, #e74c3c); }
+
+        #overlay {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9);
+            z-index: 10000; flex-direction: column; justify-content: center; align-items: center;
+        }
+    </style>
+</head>
+<body>
+
+<div id="portrait-gate"><h2>🔄 Rotate to Landscape</h2><p>Please use landscape mode to play.</p></div>
+
+<div id="ui-top">
+    <div>ID: <strong id="my-id">...</strong> <button class="btn btn-share" onclick="shareID()" style="padding:4px 8px; font-size:10px">SHARE</button></div>
+    <div id="conn-controls">
+        <input type="text" id="peer-id" placeholder="Friend's ID" style="padding:8px; border-radius:4px; border:none;">
+        <button class="btn btn-gold" onclick="connectToPeer()">JOIN</button>
+    </div>
+    <div id="connected-ui" style="display:none; color:#2ecc71; font-weight:bold">● CONNECTED</div>
+</div>
+
+<div class="game-area">
+    <div id="status-bar">Initialize Peer to Start...</div>
+    <canvas id="poolTable" width="800" height="400"></canvas>
+    <div id="power-meter"><div id="power-bar"></div></div>
+    <div style="margin-top:15px; display:flex; gap:15px;">
+        <button id="shootBtn" class="btn btn-gold" style="width:160px; height:50px; font-size:18px" disabled>🎯 SHOOT</button>
+        <button onclick="location.reload()" class="btn" style="background:#444; color:white">NEW GAME</button>
+    </div>
+</div>
+
+<div id="overlay">
+    <h1 id="res-title" style="font-size:3rem"></h1>
+    <p id="res-reason" style="margin-bottom:20px"></p>
+    <button class="btn btn-gold" onclick="location.reload()">PLAY AGAIN</button>
+</div>
+
+<script>
+    const canvas = document.getElementById('poolTable');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('status-bar');
+    const shootBtn = document.getElementById('shootBtn');
+    const powerBar = document.getElementById('power-bar');
+
+    // --- NETWORKING LOGIC ---
+    let peer = new Peer();
+    let conn = null;
+    let isMyTurn = false;
+    let ballInHand = false;
+
+    peer.on('open', id => {
+        document.getElementById('my-id').innerText = id;
+        statusEl.innerText = "READY. SEND ID TO FRIEND.";
+    });
+
+    peer.on('connection', c => {
+        conn = c; 
+        isMyTurn = true; 
+        setupNet();
+    });
+
+    function connectToPeer() {
+        const id = document.getElementById('peer-id').value;
+        if(id) {
+            conn = peer.connect(id);
+            isMyTurn = false;
+            setupNet();
+        }
+    }
+
+    function setupNet() {
+        conn.on('open', () => {
+            document.getElementById('conn-controls').style.display = 'none';
+            document.getElementById('connected-ui').style.display = 'block';
+            updateTurnUI();
+        });
+        conn.on('data', data => {
+            if(data.type === 'SHOT') {
+                const cue = balls.find(b => b.cue);
+                cue.vx = data.vx; cue.vy = data.vy;
+                if(data.balls) syncBalls(data.balls);
+                isMyTurn = true;
+                updateTurnUI();
+            } else if(data.type === 'DRAG') {
+                const cue = balls.find(b => b.cue);
+                cue.x = data.x; cue.y = data.y;
+            } else if(data.type === 'FOUL') {
+                ballInHand = true; isMyTurn = true;
+                statusEl.innerText = "FOUL! DRAG WHITE BALL";
+            } else if(data.type === 'WIN') {
+                showEnd(data.win ? 'peer' : 'me', "8-Ball Potted");
+            }
+        });
+    }
+
+    function shareID() {
+        const id = document.getElementById('my-id').innerText;
+        if(navigator.share) navigator.share({title:'8-Ball Pool', text: id});
+        else { navigator.clipboard.writeText(id); alert("ID Copied to clipboard!"); }
+    }
+
+    // --- PHYSICS ENGINE ---
+    const BALL_R = 12;
+    const FRICTION = 0.985;
+    const POCKETS = [{x:0,y:0},{x:400,y:0},{x:800,y:0},{x:0,y:400},{x:400,y:400},{x:800,y:400}];
+    let balls = [];
+    let aiming = { active: false, x:0, y:0, power:0, dragging: false };
+
+    function initTable() {
+        balls = [{ x: 200, y: 200, vx: 0, vy: 0, color: '#fff', cue: true }];
+        let id = 1;
+        for(let r=0; r<5; r++) {
+            for(let i=0; i<=r; i++) {
+                balls.push({
+                    x: 550 + (r * 23), y: 200 - (r * 13) + (i * 26),
+                    vx: 0, vy: 0, color: id===8 ? '#000' : `hsl(${id*45},70%,50%)`,
+                    id: id++
+                });
+            }
+        }
+    }
+
+    function syncBalls(s) {
+        balls.forEach((b, i) => { if(s[i]){ b.x = s[i].x; b.y = s[i].y; }});
+    }
+
+    // --- MOBILE INTERACTION ---
+    function getPtr(e) {
+        const r = canvas.getBoundingClientRect();
+        const ex = e.touches ? e.touches[0].clientX : e.clientX;
+        const ey = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: (ex - r.left) * (800 / r.width), y: (ey - r.top) * (400 / r.height) };
+    }
+
+    canvas.addEventListener('mousedown', e => handleStart(getPtr(e)));
+    canvas.addEventListener('touchstart', e => { handleStart(getPtr(e)); e.preventDefault(); }, {passive:false});
+
+    function handleStart(p) {
+        if(!isMyTurn || isMoving()) return;
+        const cue = balls.find(b => b.cue);
+        const d = Math.hypot(p.x - cue.x, p.y - cue.y);
+        if(ballInHand && d < 40) aiming.dragging = true;
+        else if(d < 40) {
+            aiming.active = true;
+            document.getElementById('power-meter').style.display = 'block';
+        }
+    }
+
+    window.addEventListener('mousemove', e => handleMove(getPtr(e)));
+    window.addEventListener('touchmove', e => { handleMove(getPtr(e)); e.preventDefault(); }, {passive:false});
+
+    function handleMove(p) {
+        const cue = balls.find(b => b.cue);
+        if(aiming.dragging) {
+            cue.x = Math.max(20, Math.min(780, p.x));
+            cue.y = Math.max(20, Math.min(380, p.y));
+            if(conn) conn.send({type:'DRAG', x:cue.x, y:cue.y});
+        } else if(aiming.active) {
+            aiming.x = p.x; aiming.y = p.y;
+            const dist = Math.hypot(p.x - cue.x, p.y - cue.y);
+            aiming.power = Math.min(dist * 0.8, 100);
+            powerBar.style.width = aiming.power + '%';
+            shootBtn.disabled = false;
+        }
+    }
+
+    window.addEventListener('mouseup', () => { aiming.active = aiming.dragging = false; ballInHand = false; });
+    window.addEventListener('touchend', () => { aiming.active = aiming.dragging = false; ballInHand = false; });
+
+    shootBtn.onclick = () => {
+        const cue = balls.find(b => b.cue);
+        const dx = aiming.x - cue.x, dy = aiming.y - cue.y;
+        const d = Math.hypot(dx, dy);
+        const vx = (dx/d) * (aiming.power/7), vy = (dy/d) * (aiming.power/7);
+        cue.vx = vx; cue.vy = vy;
+        if(conn) conn.send({type:'SHOT', vx, vy, balls});
+        isMyTurn = false; shootBtn.disabled = true;
+        document.getElementById('power-meter').style.display = 'none';
+        updateTurnUI();
+    };
+
+    // --- GAME LOOP ---
+    function isMoving() { return balls.some(b => Math.abs(b.vx) > 0.1); }
+    function updateTurnUI() { statusEl.innerText = isMyTurn ? "🟢 YOUR TURN" : "🔴 PEER TURN"; }
+
+    function showEnd(winner, reason) {
+        const o = document.getElementById('overlay');
+        document.getElementById('res-title').innerText = winner === 'me' ? "WINNER!" : "DEFEAT";
+        document.getElementById('res-reason').innerText = reason;
+        o.style.display = 'flex';
+    }
+
+    function update() {
+        balls.forEach(b => {
+            b.x += b.vx; b.y += b.vy; b.vx *= FRICTION; b.vy *= FRICTION;
+            if(b.x < BALL_R || b.x > 800-BALL_R) b.vx *= -0.8;
+            if(b.y < BALL_R || b.y > 400-BALL_R) b.vy *= -0.8;
+        });
+
+        // Collision logic
+        
+        for(let i=0; i<balls.length; i++) {
+            for(let j=i+1; j<balls.length; j++) {
+                const b1 = balls[i], b2 = balls[j];
+                const dx = b2.x-b1.x, dy = b2.y-b1.y, dist = Math.hypot(dx,dy);
+                if(dist < BALL_R*2) {
+                    const angle = Math.atan2(dy, dx), sin = Math.sin(angle), cos = Math.cos(angle);
+                    const v1 = b1.vx*cos + b1.vy*sin, v2 = b2.vx*cos + b2.vy*sin;
+                    b1.vx = v2*cos - b1.vy*sin; b1.vy = v2*sin + b1.vy*cos;
+                    b2.vx = v1*cos - b2.vy*sin; b2.vy = v1*sin + b2.vy*cos;
+                    const overlap = (BALL_R*2-dist)/2;
+                    b1.x -= overlap*cos; b1.y -= overlap*sin; b2.x += overlap*cos; b2.y += overlap*sin;
+                }
+            }
+        }
+
+        POCKETS.forEach(p => {
+            balls = balls.filter(b => {
+                if(Math.hypot(b.x-p.x, b.y-p.y) < 26) {
+                    if(b.cue) { 
+                        b.x=200; b.y=200; b.vx=0; b.vy=0; 
+                        if(conn) conn.send({type:'FOUL'});
+                        statusEl.innerText = "SCRATCH!"; return true; 
+                    }
+                    if(b.color==='#000') {
+                        const win = balls.length <= 3;
+                        showEnd(win ? (isMyTurn ? 'peer' : 'me') : (isMyTurn ? 'me' : 'peer'), "8-Ball Potted");
+                        if(conn) conn.send({type:'WIN', win: !win});
+                    }
+                    return false;
+                }
+                return true;
+            });
+        });
+    }
+
+    function draw() {
+        ctx.clearRect(0,0,800,400);
+        ctx.fillStyle = '#111';
+        POCKETS.forEach(p => { ctx.beginPath(); ctx.arc(p.x,p.y,25,0,7); ctx.fill(); });
+        
+        const cue = balls.find(b => b.cue);
+        if(isMyTurn && !isMoving()) {
+            if(ballInHand) {
+                ctx.strokeStyle = 'white'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(cue.x, cue.y, 20, 0, 7); ctx.stroke();
+            } else if(aiming.active) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.setLineDash([5,5]);
+                ctx.beginPath(); ctx.moveTo(cue.x, cue.y); ctx.lineTo(aiming.x, aiming.y); ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+
+        balls.forEach(b => {
+            ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(b.x, b.y, BALL_R, 0, 7); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.beginPath(); ctx.arc(b.x-4,b.y-4,3,0,7); ctx.fill();
+        });
+    }
+
+    // PWA Service Worker Registration
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js').then(reg => {
+                console.log('SW Registered');
+            }).catch(err => console.log('SW Failed', err));
+        });
+    }
+
+    function loop() { update(); draw(); requestAnimationFrame(loop); }
+    initTable(); loop();
+</script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="manifest.json">
+    <title>8-Ball Pro Multiplayer</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root { --gold: #eec27e; --felt: #1b7a2b; --wood: #7b5e38; }
+        * { user-select: none; -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+        body {
+            background: #0f261a; margin: 0; display: flex; flex-direction: column;
+            align-items: center; font-family: sans-serif; height: 100vh; overflow: hidden;
+            touch-action: none; color: white;
+        }
+
+        /* Portrait Warning */
+        @media screen and (orientation: portrait) { #portrait-gate { display: flex; } }
+        #portrait-gate {
+            display: none; position: fixed; inset: 0; background: #1a3a2a; color: white;
+            z-index: 9999; flex-direction: column; justify-content: center; align-items: center; text-align: center;
+        }
+
+        #ui-top {
+            background: rgba(0,0,0,0.85); width: 100%; padding: 10px 20px;
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 2px solid var(--wood); font-size: 14px;
+        }
+        .btn {
+            border: none; padding: 10px 18px; border-radius: 8px; font-weight: bold;
+            cursor: pointer; transition: transform 0.1s;
+        }
+        .btn-gold { background: var(--gold); color: #3e2e14; }
+        .btn-share { background: #007aff; color: white; }
+
+        .game-area {
+            flex-grow: 1; display: flex; flex-direction: column; justify-content: center;
+            align-items: center; width: 95%; max-width: 850px;
+        }
+        canvas {
+            background: radial-gradient(circle, #239f30, #0a621a);
+            border: 12px solid var(--wood); border-radius: 24px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8); width: 100%; height: auto;
+        }
+        #status-bar { margin: 10px 0; color: var(--gold); font-weight: bold; text-transform: uppercase; }
+        
+        #power-meter {
+            width: 100%; height: 8px; background: #222; margin-top: 10px;
+            border-radius: 4px; overflow: hidden; display: none;
+        }
+        #power-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #2ecc71, #f1c40f, #e74c3c); }
+
+        #overlay {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9);
+            z-index: 10000; flex-direction: column; justify-content: center; align-items: center;
+        }
+    </style>
+</head>
+<body>
+
+<div id="portrait-gate"><h2>🔄 Rotate to Landscape</h2><p>Please use landscape mode to play.</p></div>
+
+<div id="ui-top">
+    <div>ID: <strong id="my-id">...</strong> <button class="btn btn-share" onclick="shareID()" style="padding:4px 8px; font-size:10px">SHARE</button></div>
+    <div id="conn-controls">
+        <input type="text" id="peer-id" placeholder="Friend's ID" style="padding:8px; border-radius:4px; border:none;">
+        <button class="btn btn-gold" onclick="connectToPeer()">JOIN</button>
+    </div>
+    <div id="connected-ui" style="display:none; color:#2ecc71; font-weight:bold">● CONNECTED</div>
+</div>
+
+<div class="game-area">
+    <div id="status-bar">Initialize Peer to Start...</div>
+    <canvas id="poolTable" width="800" height="400"></canvas>
+    <div id="power-meter"><div id="power-bar"></div></div>
+    <div style="margin-top:15px; display:flex; gap:15px;">
+        <button id="shootBtn" class="btn btn-gold" style="width:160px; height:50px; font-size:18px" disabled>🎯 SHOOT</button>
+        <button onclick="location.reload()" class="btn" style="background:#444; color:white">NEW GAME</button>
+    </div>
+</div>
+
+<div id="overlay">
+    <h1 id="res-title" style="font-size:3rem"></h1>
+    <p id="res-reason" style="margin-bottom:20px"></p>
+    <button class="btn btn-gold" onclick="location.reload()">PLAY AGAIN</button>
+</div>
+
+<script>
+    const canvas = document.getElementById('poolTable');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('status-bar');
+    const shootBtn = document.getElementById('shootBtn');
+    const powerBar = document.getElementById('power-bar');
+
+    // --- NETWORKING LOGIC ---
+    let peer = new Peer();
+    let conn = null;
+    let isMyTurn = false;
+    let ballInHand = false;
+
+    peer.on('open', id => {
+        document.getElementById('my-id').innerText = id;
+        statusEl.innerText = "READY. SEND ID TO FRIEND.";
+    });
+
+    peer.on('connection', c => {
+        conn = c; 
+        isMyTurn = true; 
+        setupNet();
+    });
+
+    function connectToPeer() {
+        const id = document.getElementById('peer-id').value;
+        if(id) {
+            conn = peer.connect(id);
+            isMyTurn = false;
+            setupNet();
+        }
+    }
+
+    function setupNet() {
+        conn.on('open', () => {
+            document.getElementById('conn-controls').style.display = 'none';
+            document.getElementById('connected-ui').style.display = 'block';
+            updateTurnUI();
+        });
+        conn.on('data', data => {
+            if(data.type === 'SHOT') {
+                const cue = balls.find(b => b.cue);
+                cue.vx = data.vx; cue.vy = data.vy;
+                if(data.balls) syncBalls(data.balls);
+                isMyTurn = true;
+                updateTurnUI();
+            } else if(data.type === 'DRAG') {
+                const cue = balls.find(b => b.cue);
+                cue.x = data.x; cue.y = data.y;
+            } else if(data.type === 'FOUL') {
+                ballInHand = true; isMyTurn = true;
+                statusEl.innerText = "FOUL! DRAG WHITE BALL";
+            } else if(data.type === 'WIN') {
+                showEnd(data.win ? 'peer' : 'me', "8-Ball Potted");
+            }
+        });
+    }
+
+    function shareID() {
+        const id = document.getElementById('my-id').innerText;
+        if(navigator.share) navigator.share({title:'8-Ball Pool', text: id});
+        else { navigator.clipboard.writeText(id); alert("ID Copied to clipboard!"); }
+    }
+
+    // --- PHYSICS ENGINE ---
+    const BALL_R = 12;
+    const FRICTION = 0.985;
+    const POCKETS = [{x:0,y:0},{x:400,y:0},{x:800,y:0},{x:0,y:400},{x:400,y:400},{x:800,y:400}];
+    let balls = [];
+    let aiming = { active: false, x:0, y:0, power:0, dragging: false };
+
+    function initTable() {
+        balls = [{ x: 200, y: 200, vx: 0, vy: 0, color: '#fff', cue: true }];
+        let id = 1;
+        for(let r=0; r<5; r++) {
+            for(let i=0; i<=r; i++) {
+                balls.push({
+                    x: 550 + (r * 23), y: 200 - (r * 13) + (i * 26),
+                    vx: 0, vy: 0, color: id===8 ? '#000' : `hsl(${id*45},70%,50%)`,
+                    id: id++
+                });
+            }
+        }
+    }
+
+    function syncBalls(s) {
+        balls.forEach((b, i) => { if(s[i]){ b.x = s[i].x; b.y = s[i].y; }});
+    }
+
+    // --- MOBILE INTERACTION ---
+    function getPtr(e) {
+        const r = canvas.getBoundingClientRect();
+        const ex = e.touches ? e.touches[0].clientX : e.clientX;
+        const ey = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: (ex - r.left) * (800 / r.width), y: (ey - r.top) * (400 / r.height) };
+    }
+
+    canvas.addEventListener('mousedown', e => handleStart(getPtr(e)));
+    canvas.addEventListener('touchstart', e => { handleStart(getPtr(e)); e.preventDefault(); }, {passive:false});
+
+    function handleStart(p) {
+        if(!isMyTurn || isMoving()) return;
+        const cue = balls.find(b => b.cue);
+        const d = Math.hypot(p.x - cue.x, p.y - cue.y);
+        if(ballInHand && d < 40) aiming.dragging = true;
+        else if(d < 40) {
+            aiming.active = true;
+            document.getElementById('power-meter').style.display = 'block';
+        }
+    }
+
+    window.addEventListener('mousemove', e => handleMove(getPtr(e)));
+    window.addEventListener('touchmove', e => { handleMove(getPtr(e)); e.preventDefault(); }, {passive:false});
+
+    function handleMove(p) {
+        const cue = balls.find(b => b.cue);
+        if(aiming.dragging) {
+            cue.x = Math.max(20, Math.min(780, p.x));
+            cue.y = Math.max(20, Math.min(380, p.y));
+            if(conn) conn.send({type:'DRAG', x:cue.x, y:cue.y});
+        } else if(aiming.active) {
+            aiming.x = p.x; aiming.y = p.y;
+            const dist = Math.hypot(p.x - cue.x, p.y - cue.y);
+            aiming.power = Math.min(dist * 0.8, 100);
+            powerBar.style.width = aiming.power + '%';
+            shootBtn.disabled = false;
+        }
+    }
+
+    window.addEventListener('mouseup', () => { aiming.active = aiming.dragging = false; ballInHand = false; });
+    window.addEventListener('touchend', () => { aiming.active = aiming.dragging = false; ballInHand = false; });
+
+    shootBtn.onclick = () => {
+        const cue = balls.find(b => b.cue);
+        const dx = aiming.x - cue.x, dy = aiming.y - cue.y;
+        const d = Math.hypot(dx, dy);
+        const vx = (dx/d) * (aiming.power/7), vy = (dy/d) * (aiming.power/7);
+        cue.vx = vx; cue.vy = vy;
+        if(conn) conn.send({type:'SHOT', vx, vy, balls});
+        isMyTurn = false; shootBtn.disabled = true;
+        document.getElementById('power-meter').style.display = 'none';
+        updateTurnUI();
+    };
+
+    // --- GAME LOOP ---
+    function isMoving() { return balls.some(b => Math.abs(b.vx) > 0.1); }
+    function updateTurnUI() { statusEl.innerText = isMyTurn ? "🟢 YOUR TURN" : "🔴 PEER TURN"; }
+
+    function showEnd(winner, reason) {
+        const o = document.getElementById('overlay');
+        document.getElementById('res-title').innerText = winner === 'me' ? "WINNER!" : "DEFEAT";
+        document.getElementById('res-reason').innerText = reason;
+        o.style.display = 'flex';
+    }
+
+    function update() {
+        balls.forEach(b => {
+            b.x += b.vx; b.y += b.vy; b.vx *= FRICTION; b.vy *= FRICTION;
+            if(b.x < BALL_R || b.x > 800-BALL_R) b.vx *= -0.8;
+            if(b.y < BALL_R || b.y > 400-BALL_R) b.vy *= -0.8;
+        });
+
+        // Collision logic
+        
+        for(let i=0; i<balls.length; i++) {
+            for(let j=i+1; j<balls.length; j++) {
+                const b1 = balls[i], b2 = balls[j];
+                const dx = b2.x-b1.x, dy = b2.y-b1.y, dist = Math.hypot(dx,dy);
+                if(dist < BALL_R*2) {
+                    const angle = Math.atan2(dy, dx), sin = Math.sin(angle), cos = Math.cos(angle);
+                    const v1 = b1.vx*cos + b1.vy*sin, v2 = b2.vx*cos + b2.vy*sin;
+                    b1.vx = v2*cos - b1.vy*sin; b1.vy = v2*sin + b1.vy*cos;
+                    b2.vx = v1*cos - b2.vy*sin; b2.vy = v1*sin + b2.vy*cos;
+                    const overlap = (BALL_R*2-dist)/2;
+                    b1.x -= overlap*cos; b1.y -= overlap*sin; b2.x += overlap*cos; b2.y += overlap*sin;
+                }
+            }
+        }
+
+        POCKETS.forEach(p => {
+            balls = balls.filter(b => {
+                if(Math.hypot(b.x-p.x, b.y-p.y) < 26) {
+                    if(b.cue) { 
+                        b.x=200; b.y=200; b.vx=0; b.vy=0; 
+                        if(conn) conn.send({type:'FOUL'});
+                        statusEl.innerText = "SCRATCH!"; return true; 
+                    }
+                    if(b.color==='#000') {
+                        const win = balls.length <= 3;
+                        showEnd(win ? (isMyTurn ? 'peer' : 'me') : (isMyTurn ? 'me' : 'peer'), "8-Ball Potted");
+                        if(conn) conn.send({type:'WIN', win: !win});
+                    }
+                    return false;
+                }
+                return true;
+            });
+        });
+    }
+
+    function draw() {
+        ctx.clearRect(0,0,800,400);
+        ctx.fillStyle = '#111';
+        POCKETS.forEach(p => { ctx.beginPath(); ctx.arc(p.x,p.y,25,0,7); ctx.fill(); });
+        
+        const cue = balls.find(b => b.cue);
+        if(isMyTurn && !isMoving()) {
+            if(ballInHand) {
+                ctx.strokeStyle = 'white'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(cue.x, cue.y, 20, 0, 7); ctx.stroke();
+            } else if(aiming.active) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.setLineDash([5,5]);
+                ctx.beginPath(); ctx.moveTo(cue.x, cue.y); ctx.lineTo(aiming.x, aiming.y); ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+
+        balls.forEach(b => {
+            ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(b.x, b.y, BALL_R, 0, 7); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.beginPath(); ctx.arc(b.x-4,b.y-4,3,0,7); ctx.fill();
+        });
+    }
+
+    // PWA Service Worker Registration
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js').then(reg => {
+                console.log('SW Registered');
+            }).catch(err => console.log('SW Failed', err));
+        });
+    }
+
+    function loop() { update(); draw(); requestAnimationFrame(loop); }
+    initTable(); loop();
+</script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="manifest.json">
+    <title>8-Ball Pro Multiplayer</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root { --gold: #eec27e; --felt: #1b7a2b; --wood: #7b5e38; }
+        * { user-select: none; -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+        body {
+            background: #0f261a; margin: 0; display: flex; flex-direction: column;
+            align-items: center; font-family: sans-serif; height: 100vh; overflow: hidden;
+            touch-action: none; color: white;
+        }
+
+        /* Portrait Warning */
+        @media screen and (orientation: portrait) { #portrait-gate { display: flex; } }
+        #portrait-gate {
+            display: none; position: fixed; inset: 0; background: #1a3a2a; color: white;
+            z-index: 9999; flex-direction: column; justify-content: center; align-items: center; text-align: center;
+        }
+
+        #ui-top {
+            background: rgba(0,0,0,0.85); width: 100%; padding: 10px 20px;
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 2px solid var(--wood); font-size: 14px;
+        }
+        .btn {
+            border: none; padding: 10px 18px; border-radius: 8px; font-weight: bold;
+            cursor: pointer; transition: transform 0.1s;
+        }
+        .btn-gold { background: var(--gold); color: #3e2e14; }
+        .btn-share { background: #007aff; color: white; }
+
+        .game-area {
+            flex-grow: 1; display: flex; flex-direction: column; justify-content: center;
+            align-items: center; width: 95%; max-width: 850px;
+        }
+        canvas {
+            background: radial-gradient(circle, #239f30, #0a621a);
+            border: 12px solid var(--wood); border-radius: 24px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8); width: 100%; height: auto;
+        }
+        #status-bar { margin: 10px 0; color: var(--gold); font-weight: bold; text-transform: uppercase; }
+        
+        #power-meter {
+            width: 100%; height: 8px; background: #222; margin-top: 10px;
+            border-radius: 4px; overflow: hidden; display: none;
+        }
+        #power-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #2ecc71, #f1c40f, #e74c3c); }
+
+        #overlay {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9);
+            z-index: 10000; flex-direction: column; justify-content: center; align-items: center;
+        }
+    </style>
+</head>
+<body>
+
+<div id="portrait-gate"><h2>🔄 Rotate to Landscape</h2><p>Please use landscape mode to play.</p></div>
+
+<div id="ui-top">
+    <div>ID: <strong id="my-id">...</strong> <button class="btn btn-share" onclick="shareID()" style="padding:4px 8px; font-size:10px">SHARE</button></div>
+    <div id="conn-controls">
+        <input type="text" id="peer-id" placeholder="Friend's ID" style="padding:8px; border-radius:4px; border:none;">
+        <button class="btn btn-gold" onclick="connectToPeer()">JOIN</button>
+    </div>
+    <div id="connected-ui" style="display:none; color:#2ecc71; font-weight:bold">● CONNECTED</div>
+</div>
+
+<div class="game-area">
+    <div id="status-bar">Initialize Peer to Start...</div>
+    <canvas id="poolTable" width="800" height="400"></canvas>
+    <div id="power-meter"><div id="power-bar"></div></div>
+    <div style="margin-top:15px; display:flex; gap:15px;">
+        <button id="shootBtn" class="btn btn-gold" style="width:160px; height:50px; font-size:18px" disabled>🎯 SHOOT</button>
+        <button onclick="location.reload()" class="btn" style="background:#444; color:white">NEW GAME</button>
+    </div>
+</div>
+
+<div id="overlay">
+    <h1 id="res-title" style="font-size:3rem"></h1>
+    <p id="res-reason" style="margin-bottom:20px"></p>
+    <button class="btn btn-gold" onclick="location.reload()">PLAY AGAIN</button>
+</div>
+
+<script>
+    const canvas = document.getElementById('poolTable');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('status-bar');
+    const shootBtn = document.getElementById('shootBtn');
+    const powerBar = document.getElementById('power-bar');
+
+    // --- NETWORKING LOGIC ---
+    let peer = new Peer();
+    let conn = null;
+    let isMyTurn = false;
+    let ballInHand = false;
+
+    peer.on('open', id => {
+        document.getElementById('my-id').innerText = id;
+        statusEl.innerText = "READY. SEND ID TO FRIEND.";
+    });
+
+    peer.on('connection', c => {
+        conn = c; 
+        isMyTurn = true; 
+        setupNet();
+    });
+
+    function connectToPeer() {
+        const id = document.getElementById('peer-id').value;
+        if(id) {
+            conn = peer.connect(id);
+            isMyTurn = false;
+            setupNet();
+        }
+    }
+
+    function setupNet() {
+        conn.on('open', () => {
+            document.getElementById('conn-controls').style.display = 'none';
+            document.getElementById('connected-ui').style.display = 'block';
+            updateTurnUI();
+        });
+        conn.on('data', data => {
+            if(data.type === 'SHOT') {
+                const cue = balls.find(b => b.cue);
+                cue.vx = data.vx; cue.vy = data.vy;
+                if(data.balls) syncBalls(data.balls);
+                isMyTurn = true;
+                updateTurnUI();
+            } else if(data.type === 'DRAG') {
+                const cue = balls.find(b => b.cue);
+                cue.x = data.x; cue.y = data.y;
+            } else if(data.type === 'FOUL') {
+                ballInHand = true; isMyTurn = true;
+                statusEl.innerText = "FOUL! DRAG WHITE BALL";
+            } else if(data.type === 'WIN') {
+                showEnd(data.win ? 'peer' : 'me', "8-Ball Potted");
+            }
+        });
+    }
+
+    function shareID() {
+        const id = document.getElementById('my-id').innerText;
+        if(navigator.share) navigator.share({title:'8-Ball Pool', text: id});
+        else { navigator.clipboard.writeText(id); alert("ID Copied to clipboard!"); }
+    }
+
+    // --- PHYSICS ENGINE ---
+    const BALL_R = 12;
+    const FRICTION = 0.985;
+    const POCKETS = [{x:0,y:0},{x:400,y:0},{x:800,y:0},{x:0,y:400},{x:400,y:400},{x:800,y:400}];
+    let balls = [];
+    let aiming = { active: false, x:0, y:0, power:0, dragging: false };
+
+    function initTable() {
+        balls = [{ x: 200, y: 200, vx: 0, vy: 0, color: '#fff', cue: true }];
+        let id = 1;
+        for(let r=0; r<5; r++) {
+            for(let i=0; i<=r; i++) {
+                balls.push({
+                    x: 550 + (r * 23), y: 200 - (r * 13) + (i * 26),
+                    vx: 0, vy: 0, color: id===8 ? '#000' : `hsl(${id*45},70%,50%)`,
+                    id: id++
+                });
+            }
+        }
+    }
+
+    function syncBalls(s) {
+        balls.forEach((b, i) => { if(s[i]){ b.x = s[i].x; b.y = s[i].y; }});
+    }
+
+    // --- MOBILE INTERACTION ---
+    function getPtr(e) {
+        const r = canvas.getBoundingClientRect();
+        const ex = e.touches ? e.touches[0].clientX : e.clientX;
+        const ey = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: (ex - r.left) * (800 / r.width), y: (ey - r.top) * (400 / r.height) };
+    }
+
+    canvas.addEventListener('mousedown', e => handleStart(getPtr(e)));
+    canvas.addEventListener('touchstart', e => { handleStart(getPtr(e)); e.preventDefault(); }, {passive:false});
+
+    function handleStart(p) {
+        if(!isMyTurn || isMoving()) return;
+        const cue = balls.find(b => b.cue);
+        const d = Math.hypot(p.x - cue.x, p.y - cue.y);
+        if(ballInHand && d < 40) aiming.dragging = true;
+        else if(d < 40) {
+            aiming.active = true;
+            document.getElementById('power-meter').style.display = 'block';
+        }
+    }
+
+    window.addEventListener('mousemove', e => handleMove(getPtr(e)));
+    window.addEventListener('touchmove', e => { handleMove(getPtr(e)); e.preventDefault(); }, {passive:false});
+
+    function handleMove(p) {
+        const cue = balls.find(b => b.cue);
+        if(aiming.dragging) {
+            cue.x = Math.max(20, Math.min(780, p.x));
+            cue.y = Math.max(20, Math.min(380, p.y));
+            if(conn) conn.send({type:'DRAG', x:cue.x, y:cue.y});
+        } else if(aiming.active) {
+            aiming.x = p.x; aiming.y = p.y;
+            const dist = Math.hypot(p.x - cue.x, p.y - cue.y);
+            aiming.power = Math.min(dist * 0.8, 100);
+            powerBar.style.width = aiming.power + '%';
+            shootBtn.disabled = false;
+        }
+    }
+
+    window.addEventListener('mouseup', () => { aiming.active = aiming.dragging = false; ballInHand = false; });
+    window.addEventListener('touchend', () => { aiming.active = aiming.dragging = false; ballInHand = false; });
+
+    shootBtn.onclick = () => {
+        const cue = balls.find(b => b.cue);
+        const dx = aiming.x - cue.x, dy = aiming.y - cue.y;
+        const d = Math.hypot(dx, dy);
+        const vx = (dx/d) * (aiming.power/7), vy = (dy/d) * (aiming.power/7);
+        cue.vx = vx; cue.vy = vy;
+        if(conn) conn.send({type:'SHOT', vx, vy, balls});
+        isMyTurn = false; shootBtn.disabled = true;
+        document.getElementById('power-meter').style.display = 'none';
+        updateTurnUI();
+    };
+
+    // --- GAME LOOP ---
+    function isMoving() { return balls.some(b => Math.abs(b.vx) > 0.1); }
+    function updateTurnUI() { statusEl.innerText = isMyTurn ? "🟢 YOUR TURN" : "🔴 PEER TURN"; }
+
+    function showEnd(winner, reason) {
+        const o = document.getElementById('overlay');
+        document.getElementById('res-title').innerText = winner === 'me' ? "WINNER!" : "DEFEAT";
+        document.getElementById('res-reason').innerText = reason;
+        o.style.display = 'flex';
+    }
+
+    function update() {
+        balls.forEach(b => {
+            b.x += b.vx; b.y += b.vy; b.vx *= FRICTION; b.vy *= FRICTION;
+            if(b.x < BALL_R || b.x > 800-BALL_R) b.vx *= -0.8;
+            if(b.y < BALL_R || b.y > 400-BALL_R) b.vy *= -0.8;
+        });
+
+        // Collision logic
+        
+        for(let i=0; i<balls.length; i++) {
+            for(let j=i+1; j<balls.length; j++) {
+                const b1 = balls[i], b2 = balls[j];
+                const dx = b2.x-b1.x, dy = b2.y-b1.y, dist = Math.hypot(dx,dy);
+                if(dist < BALL_R*2) {
+                    const angle = Math.atan2(dy, dx), sin = Math.sin(angle), cos = Math.cos(angle);
+                    const v1 = b1.vx*cos + b1.vy*sin, v2 = b2.vx*cos + b2.vy*sin;
+                    b1.vx = v2*cos - b1.vy*sin; b1.vy = v2*sin + b1.vy*cos;
+                    b2.vx = v1*cos - b2.vy*sin; b2.vy = v1*sin + b2.vy*cos;
+                    const overlap = (BALL_R*2-dist)/2;
+                    b1.x -= overlap*cos; b1.y -= overlap*sin; b2.x += overlap*cos; b2.y += overlap*sin;
+                }
+            }
+        }
+
+        POCKETS.forEach(p => {
+            balls = balls.filter(b => {
+                if(Math.hypot(b.x-p.x, b.y-p.y) < 26) {
+                    if(b.cue) { 
+                        b.x=200; b.y=200; b.vx=0; b.vy=0; 
+                        if(conn) conn.send({type:'FOUL'});
+                        statusEl.innerText = "SCRATCH!"; return true; 
+                    }
+                    if(b.color==='#000') {
+                        const win = balls.length <= 3;
+                        showEnd(win ? (isMyTurn ? 'peer' : 'me') : (isMyTurn ? 'me' : 'peer'), "8-Ball Potted");
+                        if(conn) conn.send({type:'WIN', win: !win});
+                    }
+                    return false;
+                }
+                return true;
+            });
+        });
+    }
+
+    function draw() {
+        ctx.clearRect(0,0,800,400);
+        ctx.fillStyle = '#111';
+        POCKETS.forEach(p => { ctx.beginPath(); ctx.arc(p.x,p.y,25,0,7); ctx.fill(); });
+        
+        const cue = balls.find(b => b.cue);
+        if(isMyTurn && !isMoving()) {
+            if(ballInHand) {
+                ctx.strokeStyle = 'white'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(cue.x, cue.y, 20, 0, 7); ctx.stroke();
+            } else if(aiming.active) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.setLineDash([5,5]);
+                ctx.beginPath(); ctx.moveTo(cue.x, cue.y); ctx.lineTo(aiming.x, aiming.y); ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+
+        balls.forEach(b => {
+            ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(b.x, b.y, BALL_R, 0, 7); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.beginPath(); ctx.arc(b.x-4,b.y-4,3,0,7); ctx.fill();
+        });
+    }
+
+    // PWA Service Worker Registration
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js').then(reg => {
+                console.log('SW Registered');
+            }).catch(err => console.log('SW Failed', err));
+        });
+    }
+
+    function loop() { update(); draw(); requestAnimationFrame(loop); }
+    initTable(); loop();
+</script>
+</body>
+</html>
