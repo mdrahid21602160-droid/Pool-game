@@ -3,166 +3,145 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>8-Ball Verified Physics</title>
+    <title>Ultimate P2P Hub</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { background: #000; color: white; font-family: system-ui, sans-serif; margin: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; }
-        #setup { position: absolute; z-index: 100; inset: 0; background: #0a1a10; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-        #ui { height: 80px; background: #163a2a; width: 100%; border-bottom: 3px solid #eec27e; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-        canvas { background: radial-gradient(circle, #239f30, #0a621a); border: 12px solid #5d3a1a; border-radius: 12px; width: 95vw; height: 47.5vw; max-height: 60vh; touch-action: none; margin-top: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .btn { background: #eec27e; color: #3e2e14; padding: 15px 30px; border: none; border-radius: 8px; font-weight: bold; width: 250px; cursor: pointer; margin-top: 15px; font-size: 1rem; }
-        input { padding: 15px; border-radius: 8px; width: 250px; text-align: center; margin-bottom: 10px; font-size: 1.2rem; border: none; }
-        #turn-info { font-size: 1.2rem; font-weight: bold; color: #eec27e; }
+        :root { --gold: #eec27e; --bg: #0d1117; --card: #161b22; }
+        body { background: var(--bg); color: white; font-family: sans-serif; margin: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; height: 100vh; }
+        
+        /* Navigation & Lobby */
+        #lobby, #hub { position: fixed; inset: 0; background: var(--bg); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .game-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .card { background: var(--card); border: 1px solid #30363d; padding: 25px; border-radius: 12px; cursor: pointer; text-align: center; width: 130px; }
+        .card:hover { border-color: var(--gold); }
+        
+        /* Game Viewport */
+        #stage { display: none; width: 100%; height: 100%; flex-direction: column; }
+        .bar { padding: 10px; background: #161b22; display: flex; justify-content: space-between; border-bottom: 2px solid var(--gold); }
+        #view { flex-grow: 1; display: flex; align-items: center; justify-content: center; background: #000; overflow: auto; }
+        
+        /* Game Components */
+        canvas { background: #1b7a2b; border: 8px solid #5d3a1a; border-radius: 10px; max-width: 90vw; }
+        .board { display: grid; border: 5px solid #333; }
+        .sq { width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; cursor: pointer; }
+        .lt { background: #f0d9b5; } .dk { background: #b58863; }
+        .ttt-sq { width: 90px; height: 90px; background: #222; border: 1px solid #444; display: flex; align-items: center; justify-content: center; font-size: 3rem; }
+        .selected { background: #bbcb2b !important; }
     </style>
 </head>
 <body>
 
-<div id="setup">
-    <h1 style="color: #eec27e; margin-bottom: 5px;">8-BALL MULTIPLAYER</h1>
-    <p style="opacity: 0.7; margin-bottom: 20px;">P2P Low-Latency Sync</p>
-    <div id="my-id" style="font-size: 2rem; margin-bottom: 20px; font-weight: bold; letter-spacing: 2px;">...</div>
-    <input type="number" id="join-id" placeholder="Friend's Code">
-    <button class="btn" onclick="connect()">JOIN GAME</button>
+<div id="lobby">
+    <h1 style="color: var(--gold)">GAMER HUB</h1>
+    <div id="my-id" style="font-size: 2.5rem; font-weight: bold; margin-bottom: 10px;">...</div>
+    <input type="number" id="join-id" style="padding:12px; border-radius:8px; border:none; width: 200px;" placeholder="Friend's Code">
+    <button onclick="connect()" style="margin-top:15px; padding:12px 25px; background:var(--gold); border:none; border-radius:8px; font-weight:bold; cursor:pointer;">START ENGINE</button>
 </div>
 
-<div id="ui">
-    <div id="turn-info">INITIALIZING...</div>
-    <div id="type-info" style="font-size: 0.8rem; opacity: 0.8; margin-top: 4px;">Waiting for connection</div>
+<div id="hub" style="display:none;">
+    <h2 style="color: var(--gold)">SELECT ARENA</h2>
+    <div class="game-grid">
+        <div class="card" onclick="req('pool')">🎱 POOL</div>
+        <div class="card" onclick="req('chess')">♟ CHESS</div>
+        <div class="card" onclick="req('checkers')">🏁 CHECKERS</div>
+        <div class="card" onclick="req('ttt')">❌ TIC-TAC-TOE</div>
+    </div>
 </div>
 
-<canvas id="table" width="800" height="400"></canvas>
+<div id="stage">
+    <div class="bar">
+        <button onclick="exit()" style="background:none; color:white; border:1px solid #444; padding:5px 10px; cursor:pointer;">EXIT TO HUB</button>
+        <div id="status" style="color:var(--gold); font-weight:bold;">WAITING...</div>
+    </div>
+    <div id="view"></div>
+</div>
 
 <script>
-    const canvas = document.getElementById('table');
-    const ctx = canvas.getContext('2d');
-    const turnInfo = document.getElementById('turn-info');
-    const typeInfo = document.getElementById('type-info');
-
-    let balls = [], isMyTurn = false, isMoving = false, myType = null;
-    const BALL_R = 11;
-    const pockets = [{x:0,y:0},{x:400,y:0},{x:800,y:0},{x:0,y:400},{x:400,y:400},{x:800,y:400}];
-
-    const myShortId = Math.floor(1000 + Math.random() * 9000).toString();
-    const peer = new Peer(myShortId);
-    let conn = null;
-
+    let peer, conn, myRole, isMyTurn, curG;
+    const sid = Math.floor(1000 + Math.random()*9000).toString();
+    peer = new Peer(sid);
     peer.on('open', id => document.getElementById('my-id').innerText = id);
-    peer.on('connection', c => { conn = c; isMyTurn = true; setupNet(); });
-    function connect() { conn = peer.connect(document.getElementById('join-id').value); isMyTurn = false; setupNet(); }
+    peer.on('connection', c => { conn = c; myRole='w'; isMyTurn=true; setup(); });
 
-    function setupNet() {
-        conn.on('open', () => { document.getElementById('setup').style.display = 'none'; updateUI(); });
-        conn.on('data', data => {
-            if (data.type === 'STATE') {
-                data.balls.forEach((b, i) => { balls[i].x = b.x; balls[i].y = b.y; });
-                isMoving = data.moving;
-                if (data.swap) { isMyTurn = true; myType = data.yourType; updateUI(); }
-            }
+    function connect() { 
+        conn = peer.connect(document.getElementById('join-id').value); 
+        myRole='b'; isMyTurn=false; setup(); 
+    }
+
+    function setup() {
+        conn.on('open', () => { lobby.style.display='none'; hub.style.display='flex'; });
+        conn.on('data', d => {
+            if(d.type==='SET') load(d.val);
+            if(d.type==='ACT') handle(d);
         });
     }
 
-    function updateUI() {
-        turnInfo.innerText = isMyTurn ? "★ YOUR TURN ★" : "OPPONENT'S TURN";
-        typeInfo.innerText = myType ? `BALLS: ${myType.toUpperCase()}S` : "Pocket any ball to set your type";
+    function req(g) { conn.send({type:'SET', val:g}); load(g); }
+    function exit() { stage.style.display='none'; hub.style.display='flex'; curG=''; }
+
+    function load(g) {
+        hub.style.display='none'; stage.style.display='flex';
+        curG = g; document.getElementById('view').innerHTML = '';
+        if(g==='pool') initPool();
+        if(g==='chess' || g==='checkers') initBoard(g);
+        if(g==='ttt') initTTT();
+        refresh();
     }
 
-    function initRack() {
-        balls = [{ x: 200, y: 200, vx: 0, vy: 0, color: '#fff', type: 'cue' }];
-        let xS = 550, yS = 200;
-        for(let c=0; c<5; c++) {
-            for(let r=0; r<=c; r++) {
-                let t = (c === 2 && r === 1) ? '8ball' : ((c+r)%2 === 0 ? 'solid' : 'stripe');
-                let clr = t === '8ball' ? '#000' : (t === 'solid' ? '#f33' : '#ff3');
-                balls.push({ x: xS + (c * 21), y: yS + (r * 24) - (c * 12), vx:0, vy:0, color: clr, type: t });
-            }
+    function initTTT() {
+        const wrap = document.createElement('div'); wrap.style.display='grid'; wrap.style.gridTemplateColumns='repeat(3,90px)';
+        for(let i=0; i<9; i++) {
+            const s = document.createElement('div'); s.className='ttt-sq'; s.id='t'+i;
+            s.onclick = () => { if(isMyTurn && s.innerText==='') {
+                s.innerText = myRole==='w'?'X':'O'; isMyTurn=false; refresh();
+                conn.send({type:'ACT', g:'ttt', i, val:s.innerText});
+            }};
+            wrap.appendChild(s);
         }
+        document.getElementById('view').appendChild(wrap);
     }
-    initRack();
 
-    let drag = { active: false, x1: 0, y1: 0, x2: 0, y2: 0 };
-    const getPos = (e) => {
-        const r = canvas.getBoundingClientRect();
-        const cx = (e.touches ? e.touches[0].clientX : e.clientX);
-        const cy = (e.touches ? e.touches[0].clientY : e.clientY);
-        return { x: (cx - r.left) * (800 / r.width), y: (cy - r.top) * (400 / r.height) };
-    };
+    function initBoard(type) {
+        const wrap = document.createElement('div'); wrap.className='board'; wrap.style.gridTemplateColumns='repeat(8,45px)';
+        for(let i=0; i<64; i++) {
+            const s = document.createElement('div'); s.className=`sq ${(Math.floor(i/8)+i)%2===0?'lt':'dk'}`; s.id='s'+i;
+            s.onclick = () => { if(isMyTurn) {
+                document.querySelectorAll('.sq').forEach(x=>x.classList.remove('selected'));
+                s.classList.add('selected'); isMyTurn=false; refresh();
+                conn.send({type:'ACT', g:type, i});
+            }};
+            wrap.appendChild(s);
+        }
+        document.getElementById('view').appendChild(wrap);
+    }
 
-    canvas.onmousedown = canvas.ontouchstart = (e) => { 
-        if(isMyTurn && !isMoving) { drag.active = true; const p = getPos(e); drag.x1 = p.x; drag.y1 = p.y; drag.x2 = p.x; drag.y2 = p.y; } 
-    };
-    window.onmousemove = window.ontouchmove = (e) => { 
-        if(drag.active) { const p = getPos(e); drag.x2 = p.x; drag.y2 = p.y; } 
-    };
-    window.onmouseup = window.ontouchend = () => {
-        if(!drag.active) return;
-        const dx = drag.x1 - drag.x2, dy = drag.y1 - drag.y2;
-        const pwr = Math.min(Math.hypot(dx, dy) / 8, 22);
-        const ang = Math.atan2(dy, dx);
-        balls[0].vx = Math.cos(ang) * pwr; balls[0].vy = Math.sin(ang) * pwr;
-        drag.active = false; isMoving = true;
-    };
-
-    function update() {
-        if (isMyTurn) {
-            let moving = false;
-            balls.forEach((b, i) => {
-                if (b.x < -20) return;
-                b.x += b.vx; b.y += b.vy;
-                b.vx *= 0.988; b.vy *= 0.988;
-                if (Math.hypot(b.vx, b.vy) > 0.15) moving = true; else { b.vx = 0; b.vy = 0; }
-
-                if(b.x < BALL_R || b.x > 800-BALL_R) { b.vx *= -0.75; b.x = b.x < BALL_R ? BALL_R : 800-BALL_R; }
-                if(b.y < BALL_R || b.y > 400-BALL_R) { b.vy *= -0.75; b.y = b.y < BALL_R ? BALL_R : 400-BALL_R; }
-
-                for(let j=i+1; j<balls.length; j++){
-                    let b2 = balls[j]; if(b2.x < -20) continue;
-                    let dx = b2.x-b.x, dy = b2.y-b.y, d = Math.hypot(dx, dy);
-                    if(d < BALL_R*2){
-                        let nx = dx/d, ny = dy/d, ov = (BALL_R*2-d);
-                        b.x -= nx*ov/2; b.y -= ny*ov/2; b2.x += nx*ov/2; b2.y += ny*ov/2;
-                        let v1n = b.vx*nx + b.vy*ny, v2n = b2.vx*nx + b2.vy*ny;
-                        b.vx += (v2n-v1n)*nx; b.vy += (v2n-v1n)*ny;
-                        b2.vx += (v1n-v2n)*nx; b2.vy += (v1n-v2n)*ny;
-                    }
-                }
-                pockets.forEach(p => {
-                    if(Math.hypot(b.x-p.x, b.y-p.y) < 25) {
-                        if(b.type === 'cue') { b.x=200; b.y=200; b.vx=0; b.vy=0; }
-                        else if(b.type === '8ball') { alert(myType ? "GAME OVER" : "8-BALL SUNK EARLY!"); location.reload(); }
-                        else { if(!myType) myType = b.type; b.x = -100; b.vx = 0; b.vy = 0; }
-                    }
-                });
+    function initPool() {
+        document.getElementById('view').innerHTML = '<canvas id="pc" width="800" height="400"></canvas>';
+        const can = document.getElementById('pc'), ctx = can.getContext('2d');
+        let balls = [{x:400,y:200,vx:0,vy:0,c:'#fff'}];
+        can.onclick = () => { if(isMyTurn) { balls[0].vx=10; isMyTurn=false; refresh(); conn.send({type:'ACT', g:'pool', b:balls}); }};
+        function loop() {
+            if(curG!=='pool') return;
+            ctx.clearRect(0,0,800,400);
+            balls.forEach(b => {
+                b.x+=b.vx; b.vx*=0.98; if(b.x<10||b.x>790) b.vx*=-1;
+                ctx.fillStyle=b.c; ctx.beginPath(); ctx.arc(b.x,b.y,12,0,7); ctx.fill();
             });
-
-            if (conn && conn.open) {
-                let swap = (isMoving && !moving);
-                let opT = myType === 'solid' ? 'stripe' : (myType === 'stripe' ? 'solid' : null);
-                conn.send({ type: 'STATE', balls: balls.map(b=>({x:b.x, y:b.y})), moving, swap, yourType: opT });
-                if(swap) { isMyTurn = false; isMoving = false; updateUI(); }
-            }
-            isMoving = moving;
+            requestAnimationFrame(loop);
         }
-
-        ctx.clearRect(0,0,800,400);
-        pockets.forEach(p => { ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(p.x, p.y, 25, 0, 7); ctx.fill(); });
-        balls.forEach(b => {
-            if(b.x < 0) return;
-            ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(b.x, b.y, BALL_R, 0, 7); ctx.fill();
-            if(b.type === 'stripe') { 
-                ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.stroke();
-                ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, 7); ctx.fill();
-            }
-        });
-
-        if(drag.active) {
-            ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.setLineDash([5,5]);
-            ctx.beginPath(); ctx.moveTo(balls[0].x, balls[0].y);
-            ctx.lineTo(balls[0].x + (drag.x1 - drag.x2), balls[0].y + (drag.y1 - drag.y2)); ctx.stroke();
-            ctx.setLineDash([]);
-        }
-        requestAnimationFrame(update);
+        loop();
     }
-    update();
+
+    function handle(d) {
+        isMyTurn = true; refresh();
+        if(d.g==='ttt') document.getElementById('t'+d.i).innerText = d.val;
+        if(d.g==='chess'||d.g==='checkers') {
+            document.querySelectorAll('.sq').forEach(x=>x.classList.remove('selected'));
+            document.getElementById('s'+d.i).classList.add('selected');
+        }
+    }
+
+    function refresh() { document.getElementById('status').innerText = isMyTurn ? "★ YOUR TURN ★" : "OPPONENT'S TURN"; }
 </script>
 </body>
 </html>
