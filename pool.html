@@ -2,22 +2,165 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>P2P Pro Game Hub</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Multiplayer Pool</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { background: #0d1117; color: white; font-family: system-ui, sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 90%; max-width: 500px; }
-        .card { background: #161b22; border: 2px solid #30363d; padding: 40px; border-radius: 15px; text-decoration: none; color: white; font-weight: bold; font-size: 1.2rem; transition: 0.3s; text-align: center; }
-        .card:hover { border-color: #eec27e; transform: translateY(-5px); background: #1c2128; box-shadow: 0 10px 20px rgba(0,0,0,0.5); }
-        h1 { color: #eec27e; font-size: 3rem; margin-bottom: 40px; }
+        body { background: #000; color: white; font-family: sans-serif; margin:0; overflow: hidden; display: flex; flex-direction: column; align-items: center; }
+        #ui { background: #163a2a; width: 100%; padding: 10px; border-bottom: 2px solid #eec27e; text-align: center; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
+        canvas { background: radial-gradient(circle, #239f30, #0a621a); border: 8px solid #5d3a1a; border-radius: 10px; margin-top: 10px; touch-action: none; max-width: 98vw; height: auto; cursor: crosshair; }
+        #setup { position: fixed; inset: 0; background: #0a1a10; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .btn { background: #eec27e; color: #3e2e14; padding: 15px 30px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1.2rem; width: 80%; max-width: 300px; }
+        input { padding: 15px; border-radius: 8px; margin-bottom: 15px; width: 80%; max-width: 300px; text-align: center; font-size: 1.2rem; background: #163a2a; color: white; border: 1px solid #eec27e; }
+        #my-id { font-size: 3.5rem; font-weight: bold; margin: 10px; color: #fff; text-shadow: 0 0 15px #eec27e; }
     </style>
 </head>
 <body>
-    <h1>GAME HUB</h1>
-    <div class="grid">
-        <a href="pool.html" class="card">🎱 POOL</a>
-        <a href="chess.html" class="card">♟ CHESS</a>
-        <a href="checkers.html" class="card">🏁 CHECKERS</a>
-        <a href="tictactoe.html" class="card">❌ TIC-TAC-TOE</a>
+    <div id="setup">
+        <h1 style="color: #eec27e; margin-bottom: 5px;">POOL LOBBY</h1>
+        <p style="margin: 0; opacity: 0.7;">Your Connection Code:</p>
+        <div id="my-id">LOADING...</div>
+        <input type="number" id="join-id" placeholder="Friend's Code">
+        <button class="btn" onclick="connect()">CONNECT & PLAY</button>
+        <button onclick="start(true)" style="margin-top: 25px; background: none; color: #eec27e; border: 1px solid #eec27e; padding: 8px 20px; border-radius: 5px; cursor: pointer;">PRACTICE OFFLINE</button>
     </div>
+    
+    <div id="ui">
+        <button onclick="window.location.href='index.html'" style="background: none; color: white; border: 1px solid #eec27e; padding: 5px 12px; border-radius: 5px;">HUB</button>
+        <div id="turn">INITIALIZING...</div>
+        <div style="width: 50px;"></div>
+    </div>
+    <canvas id="table" width="800" height="400"></canvas>
+
+<script>
+    const canvas = document.getElementById('table');
+    const ctx = canvas.getContext('2d');
+    let balls = [], isMyTurn = true, myRole = 'w', conn = null;
+
+    // Fix: Ensure a numeric ID is requested immediately
+    const generatedCode = Math.floor(1000 + Math.random()*9000).toString();
+    const peer = new Peer(generatedCode);
+
+    peer.on('open', id => {
+        document.getElementById('my-id').innerText = id;
+        document.getElementById('turn').innerText = "WAITING FOR OPPONENT";
+    });
+
+    peer.on('connection', c => {
+        conn = c; isMyTurn = true; myRole = 'w';
+        setupNetwork(); start();
+    });
+
+    function connect() {
+        const tid = document.getElementById('join-id').value;
+        if(!tid) return alert("Need Code!");
+        conn = peer.connect(tid);
+        myRole = 'b'; isMyTurn = false;
+        setupNetwork(); start();
+    }
+
+    function setupNetwork() {
+        conn.on('open', () => {
+            document.getElementById('setup').style.display = 'none';
+            conn.on('data', d => {
+                if(d.type==='SYNC') { 
+                    balls = d.balls; 
+                    if(d.swap) isMyTurn=true; 
+                    updateUI(); 
+                }
+            });
+        });
+    }
+
+    function start(offline = false) {
+        document.getElementById('setup').style.display = 'none';
+        initRack();
+        animate();
+        if(offline) {
+            document.getElementById('turn').innerText = "PRACTICE MODE";
+            isMyTurn = true;
+        }
+    }
+
+    function initRack() {
+        // Cue ball
+        balls = [{x:200, y:200, vx:0, vy:0, color:'#fff'}];
+        let xS = 550, yS = 200;
+        // Rack formation
+        for(let c=0; c<5; c++) {
+            for(let r=0; r<=c; r++) {
+                balls.push({
+                    x: xS+(c*22), 
+                    y: yS+(r*24)-(c*12), 
+                    vx:0, vy:0, 
+                    color:(c+r)%2===0?'#f33':'#ff3'
+                });
+            }
+        }
+    }
+
+    function updateUI() {
+        document.getElementById('turn').innerText = isMyTurn ? "★ YOUR TURN ★" : "OPPONENT'S TURN";
+    }
+
+    canvas.onmousedown = (e) => {
+        if(!isMyTurn) return;
+        const rect = canvas.getBoundingClientRect();
+        const mx = (e.clientX - rect.left) * (800 / rect.width);
+        const my = (e.clientY - rect.top) * (400 / rect.height);
+        
+        // Physics logic from original code
+        balls[0].vx = (balls[0].x - mx)/10; 
+        balls[0].vy = (balls[0].y - my)/10;
+        
+        isMyTurn = false; 
+        updateUI();
+    };
+
+    function animate() {
+        ctx.clearRect(0,0,800,400);
+        let moving = false;
+        
+        balls.forEach((b, i) => {
+            b.x += b.vx; b.y += b.vy; 
+            // Friction logic
+            b.vx *= 0.985; b.vy *= 0.985;
+            
+            if(Math.abs(b.vx) > 0.1 || Math.abs(b.vy) > 0.1) moving = true;
+            
+            // Wall bounce logic
+            if(b.x<11 || b.x>789) b.vx *= -0.8; 
+            if(b.y<11 || b.y>389) b.vy *= -0.8;
+            
+            // Collision logic
+            for(let j=i+1; j<balls.length; j++){
+                let b2 = balls[j];
+                let d = Math.hypot(b2.x-b.x, b2.y-b.y);
+                if(d < 22){
+                    let tx = b.vx; let ty = b.vy;
+                    b.vx = b2.vx; b.vy = b2.vy; 
+                    b2.vx = tx; b2.vy = ty;
+                }
+            }
+            
+            ctx.fillStyle = b.color; 
+            ctx.beginPath(); 
+            ctx.arc(b.x, b.y, 11, 0, Math.PI*2); 
+            ctx.fill();
+            ctx.strokeStyle = "rgba(255,255,255,0.4)"; 
+            ctx.stroke();
+        });
+
+        // Networking sync
+        if(conn && conn.open && (myRole==='w' || !isMyTurn)) {
+            conn.send({
+                type:'SYNC', 
+                balls, 
+                swap: !moving && (Math.abs(balls[0].vx) > 0.01)
+            });
+        }
+        requestAnimationFrame(animate);
+    }
+</script>
 </body>
 </html>
