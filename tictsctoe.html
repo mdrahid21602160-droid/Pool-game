@@ -5,43 +5,55 @@
     <title>P2P Tic-Tac-Toe</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { background: #0d1117; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        #board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 20px; }
-        .cell { width: 100px; height: 100px; background: #161b22; border: 3px solid #30363d; display: flex; align-items: center; justify-content: center; font-size: 3.5rem; font-weight: bold; cursor: pointer; border-radius: 12px; }
-        .cell:hover { border-color: #eec27e; }
+        body { background: #000; color: white; font-family: sans-serif; margin:0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+        #board { display: grid; grid-template-columns: repeat(3, 100px); gap: 10px; margin-top: 20px; }
+        .sq { width: 100px; height: 100px; background: #161b22; border: 2px solid #30363d; display: flex; align-items: center; justify-content: center; font-size: 3rem; cursor: pointer; border-radius: 10px; }
+        .sq:hover { border-color: #eec27e; }
         #setup { position: fixed; inset: 0; background: #0d1117; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .btn { background: #eec27e; color: #000; padding: 15px 30px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .btn { background: #eec27e; color: #3e2e14; padding: 15px 30px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
     <div id="setup">
-        <h1 style="color:#eec27e">TIC-TAC-TOE</h1>
-        <div id="my-id" style="font-size: 2.5rem; margin-bottom: 20px;">...</div>
-        <input type="number" id="join-id" placeholder="Code" style="padding:15px; border-radius:5px; border:none; margin-bottom:10px;">
-        <button class="btn" onclick="connect()">JOIN GAME</button>
-        <a href="index.html" style="color:#444; margin-top:20px; text-decoration:none;">Back to Hub</a>
+        <h1 style="color: #eec27e">TTT LOBBY</h1>
+        <div id="my-id" style="font-size: 2rem; margin: 20px;">...</div>
+        <input type="number" id="join-id" placeholder="Friend's Code" style="padding:15px; border-radius:8px; margin-bottom:10px;">
+        <button class="btn" onclick="connect()">CONNECT & START</button>
     </div>
-    <div id="status" style="font-size: 1.5rem; color:#eec27e; font-weight:bold;">WAITING...</div>
-    <div id="board">
-        <div class="cell" onclick="m(0)"></div><div class="cell" onclick="m(1)"></div><div class="cell" onclick="m(2)"></div>
-        <div class="cell" onclick="m(3)"></div><div class="cell" onclick="m(4)"></div><div class="cell" onclick="m(5)"></div>
-        <div class="cell" onclick="m(6)"></div><div class="cell" onclick="m(7)"></div><div class="cell" onclick="m(8)"></div>
-    </div>
-    <script>
-        let p = new Peer(Math.floor(1000 + Math.random()*9000).toString()), c, s, t = false;
-        p.on('open', i => document.getElementById('my-id').innerText = i);
-        p.on('connection', x => { c = x; s = 'X'; t = true; net(); });
-        function connect() { c = p.connect(document.getElementById('join-id').value); s = 'O'; t = false; net(); }
-        function net() {
-            c.on('open', () => { document.getElementById('setup').style.display='none'; u(); });
-            c.on('data', d => { document.querySelectorAll('.cell')[d].innerText = s==='X'?'O':'X'; t = true; u(); });
-        }
-        function m(i) {
-            const l = document.querySelectorAll('.cell');
-            if(!t || l[i].innerText !== '') return;
-            l[i].innerText = s; t = false; u(); c.send(i);
-        }
-        function u() { document.getElementById('status').innerText = t ? "★ YOUR TURN ★" : "THEIR TURN"; }
-    </script>
+    <div id="turn" style="font-size: 1.5rem; color: #eec27e;">WAITING...</div>
+    <div id="board"></div>
+
+<script>
+    const boardEl = document.getElementById('board');
+    let state = Array(9).fill('');
+    let isMyTurn = false, myChar = 'X', conn = null;
+
+    const peer = new Peer(Math.floor(1000 + Math.random()*9000).toString());
+    peer.on('open', id => document.getElementById('my-id').innerText = id);
+    peer.on('connection', c => { conn = c; isMyTurn = true; myChar = 'X'; init(); });
+    function connect() { conn = peer.connect(document.getElementById('join-id').value); myChar = 'O'; isMyTurn = false; init(); }
+
+    function init() {
+        document.getElementById('setup').style.display = 'none';
+        render();
+        conn.on('data', d => { state = d.state; isMyTurn = true; render(); });
+    }
+
+    function render() {
+        boardEl.innerHTML = '';
+        document.getElementById('turn').innerText = isMyTurn ? "★ YOUR TURN ( " + myChar + " ) ★" : "OPPONENT'S TURN";
+        state.forEach((val, i) => {
+            const s = document.createElement('div');
+            s.className = 'sq';
+            s.innerText = val;
+            s.onclick = () => {
+                if(!isMyTurn || state[i]) return;
+                state[i] = myChar;
+                isMyTurn = false; conn.send({state}); render();
+            };
+            boardEl.appendChild(s);
+        });
+    }
+</script>
 </body>
 </html>
