@@ -10,12 +10,16 @@
         .sq { width: 100px; height: 100px; background: #161b22; border: 2px solid #30363d; display: flex; align-items: center; justify-content: center; font-size: 3rem; cursor: pointer; border-radius: 12px; }
         #setup { position: fixed; inset: 0; background: #0d1117; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .btn { background: #eec27e; color: #3e2e14; padding: 15px 30px; border: none; border-radius: 8px; font-weight: bold; }
+        
+        /* Loading Spinner */
+        .spinner { display: inline-block; width: 30px; height: 30px; border: 4px solid rgba(238, 194, 126, 0.3); border-radius: 50%; border-top-color: #eec27e; animation: spin 1s ease-in-out infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
     <div id="setup">
         <h1 style="color:#eec27e">TIC-TAC-TOE</h1>
-        <div id="my-id" style="font-size:3rem; margin:15px;">...</div>
+        <div id="my-id" style="font-size:3rem; margin:15px;"><span class="spinner"></span></div>
         <input type="number" id="join-id" style="padding:15px; text-align:center; margin-bottom:10px; border-radius:8px;">
         <button class="btn" onclick="connect()">JOIN</button>
     </div>
@@ -25,8 +29,21 @@
 <script>
     const boardEl = document.getElementById('board');
     let state = Array(9).fill(''), isMyTurn = true, myChar = 'X', conn = null;
+    
+    // Initialize Peer
     const peer = new Peer(Math.floor(1000 + Math.random()*9000).toString());
-    peer.on('open', id => document.getElementById('my-id').innerText = id);
+    
+    // Timeout logic
+    let connectionTimeout = setTimeout(() => {
+        document.getElementById('my-id').innerHTML = 
+            '<span style="color:red; font-size:1rem;">Slow connection. Please reload.</span>';
+    }, 15000); // 15 seconds
+
+    peer.on('open', id => {
+        clearTimeout(connectionTimeout); // Stop timeout
+        document.getElementById('my-id').innerText = id;
+    });
+
     peer.on('connection', c => { conn = c; isMyTurn = true; myChar = 'X'; start(); });
     function connect() { const tid = document.getElementById('join-id').value; conn = peer.connect(tid); myChar = 'O'; isMyTurn = false; start(); }
     function start() { document.getElementById('setup').style.display='none'; if(conn) conn.on('data', d => { state = d.state; isMyTurn = true; render(); }); render(); }
