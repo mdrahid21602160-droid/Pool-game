@@ -5,48 +5,63 @@
     <title>Tic-Tac-Toe Pro</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { background: #0d1117; color: white; font-family: sans-serif; margin:0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
-        #board { display: grid; grid-template-columns: repeat(3, 100px); gap: 10px; }
-        .sq { width: 100px; height: 100px; background: #161b22; border: 2px solid #30363d; display: flex; align-items: center; justify-content: center; font-size: 3rem; cursor: pointer; border-radius: 12px; }
-        #setup { position: fixed; inset: 0; background: #0d1117; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .btn { background: #eec27e; color: #3e2e14; padding: 15px 30px; border: none; border-radius: 8px; font-weight: bold; }
-        
-        /* Loading Spinner */
-        .spinner { display: inline-block; width: 30px; height: 30px; border: 4px solid rgba(238, 194, 126, 0.3); border-radius: 50%; border-top-color: #eec27e; animation: spin 1s ease-in-out infinite; }
+        :root { --gold: #eec27e; --dark: #0d1117; --card: #161b22; --border: #30363d; }
+        body { background: var(--dark); color: white; font-family: sans-serif; margin:0; display: flex; flex-direction: column; align-items: center; height: 100vh; overflow: hidden; }
+        #board { display: grid; grid-template-columns: repeat(3, 100px); gap: 10px; margin-top: 20px;}
+        .sq { width: 100px; height: 100px; background: var(--card); border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 3rem; cursor: pointer; border-radius: 12px; }
+        #setup { position: fixed; inset: 0; background: rgba(13,17,23,0.98); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .code-display { font-family: 'Courier New', monospace; background: #000; color: var(--gold); padding: 15px 30px; border-radius: 8px; letter-spacing: 5px; font-size: 2.5rem; border: 2px solid var(--gold); margin: 20px 0; font-weight: bold; }
+        .btn { background: var(--gold); color: #3e2e14; padding: 15px 30px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        input { padding: 15px; text-align: center; border-radius: 8px; background: #111; color: white; border: 1px solid var(--border); width: 200px; margin-bottom:10px; }
+        #chat-container { position: fixed; bottom: 10px; right: 10px; width: 250px; height: 300px; background: var(--card); border: 1px solid var(--border); display: flex; flex-direction: column; border-radius: 8px; z-index: 90; }
+        #chat-msgs { flex-grow: 1; overflow-y: scroll; padding: 10px; font-size: 12px; }
+        #chat-input { border: none; padding: 10px; background: var(--dark); color: white; border-top: 1px solid var(--border); }
+        .spinner { display: inline-block; width: 30px; height: 30px; border: 4px solid rgba(238, 194, 126, 0.3); border-radius: 50%; border-top-color: var(--gold); animation: spin 1s ease-in-out infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
     <div id="setup">
-        <h1 style="color:#eec27e">TIC-TAC-TOE</h1>
-        <div id="my-id" style="font-size:3rem; margin:15px;"><span class="spinner"></span></div>
-        <input type="number" id="join-id" style="padding:15px; text-align:center; margin-bottom:10px; border-radius:8px;">
+        <h1 style="color:var(--gold)">TIC-TAC-TOE</h1>
+        <div id="my-id"><span class="spinner"></span></div>
+        <input type="number" id="join-id" placeholder="Friend's Code">
         <button class="btn" onclick="connect()">JOIN</button>
     </div>
-    <div id="turn" style="font-size: 1.5rem; color: #eec27e; margin-bottom: 20px;">WAITING...</div>
+    <div id="turn" style="font-size: 1.5rem; color: var(--gold); margin-top: 20px; font-weight:bold;">WAITING...</div>
     <div id="board"></div>
-    <button id="res" onclick="location.reload()" style="display:none; margin-top:20px; background:#eec27e; padding:10px; border-radius:5px; border:none; font-weight:bold;">NEW GAME</button>
+    <button id="res" onclick="location.reload()" style="display:none; margin-top:20px; background:var(--gold); padding:10px; border-radius:5px; border:none; font-weight:bold; cursor:pointer;">NEW GAME</button>
+    <div id="chat-container">
+        <div id="chat-msgs"></div>
+        <input type="text" id="chat-input" placeholder="Type message...">
+    </div>
 <script>
-    const boardEl = document.getElementById('board');
-    let state = Array(9).fill(''), isMyTurn = true, myChar = 'X', conn = null;
-    
-    // Initialize Peer
+    const boardEl = document.getElementById('board'), chatMsgs = document.getElementById('chat-msgs'), chatInput = document.getElementById('chat-input');
+    let state = Array(9).fill(''), isMyTurn = false, myChar = 'X', conn = null;
     const peer = new Peer(Math.floor(1000 + Math.random()*9000).toString());
-    
-    // Timeout logic
-    let connectionTimeout = setTimeout(() => {
-        document.getElementById('my-id').innerHTML = 
-            '<span style="color:red; font-size:1rem;">Slow connection. Please reload.</span>';
-    }, 15000); // 15 seconds
-
-    peer.on('open', id => {
-        clearTimeout(connectionTimeout); // Stop timeout
-        document.getElementById('my-id').innerText = id;
+    peer.on('open', id => document.getElementById('my-id').innerHTML = `<div class="code-display">${id}</div>`);
+    peer.on('connection', c => { conn = c; isMyTurn = true; myChar = 'X'; setupConn(); start(); });
+    function connect() { const tid = document.getElementById('join-id').value; conn = peer.connect(tid); myChar = 'O'; isMyTurn = false; setupConn(); start(); }
+    function setupConn() {
+        conn.on('open', () => {
+            conn.on('data', d => {
+                if(d.type === 'CHAT') addMessage('Friend', d.msg);
+                else { state = d.state; isMyTurn = true; render(); }
+            });
+            // --- GRACEFUL DISCONNECT ---
+            conn.on('close', () => { alert("Friend disconnected!"); location.reload(); });
+        });
+    }
+    function start() { document.getElementById('setup').style.display='none'; render(); }
+    chatInput.addEventListener('keypress', (e) => {
+        if(e.key === 'Enter' && conn) {
+            const msg = chatInput.value;
+            if(msg.trim() === "") return;
+            conn.send({type: 'CHAT', msg: msg});
+            addMessage('You', msg);
+            chatInput.value = '';
+        }
     });
-
-    peer.on('connection', c => { conn = c; isMyTurn = true; myChar = 'X'; start(); });
-    function connect() { const tid = document.getElementById('join-id').value; conn = peer.connect(tid); myChar = 'O'; isMyTurn = false; start(); }
-    function start() { document.getElementById('setup').style.display='none'; if(conn) conn.on('data', d => { state = d.state; isMyTurn = true; render(); }); render(); }
+    function addMessage(user, msg) { chatMsgs.innerHTML += `<div><strong>${user}:</strong> ${msg}</div>`; chatMsgs.scrollTop = chatMsgs.scrollHeight; }
     function checkWin() {
         const w = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
         for(let l of w) if(state[l[0]] && state[l[0]]===state[l[1]] && state[l[0]]===state[l[2]]) return state[l[0]];
