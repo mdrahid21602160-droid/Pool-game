@@ -5,8 +5,9 @@
     <title>P2P Checkers Pro</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        :root { --sq: min(12vw, 55px); }
-        body { background: #0d1117; color: white; font-family: sans-serif; margin:0; display: flex; flex-direction: column; align-items: center; }
+        :root { --sq: min(12vw, 55px); --gold: #eec27e; --dark: #0d1117; --card: #161b22; --border: #30363d; }
+        body { background: var(--dark); color: white; font-family: sans-serif; margin:0; display: flex; flex-direction: column; align-items: center; }
+        
         #board { display: grid; grid-template-columns: repeat(8, var(--sq)); border: 6px solid #333; margin-top: 15px; }
         .sq { width: var(--sq); height: var(--sq); display: flex; align-items: center; justify-content: center; cursor: pointer; }
         .l { background: #f0d9b5; } .d { background: #b58863; }
@@ -14,29 +15,82 @@
         .piece { width: 80%; height: 80%; border-radius: 50%; border: 2px solid #000; }
         .p-w { background: #fff; } .p-b { background: #d33; }
         .king { border: 4px solid #ffd700 !important; }
-        #setup { position: fixed; inset: 0; background: #0d1117; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .btn { background: #eec27e; color: #3e2e14; padding: 15px 30px; border: none; border-radius: 8px; font-weight: bold; }
+
+        /* Setup/Lobby */
+        #setup { position: fixed; inset: 0; background: rgba(13,17,23,0.98); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .code-display { font-family: 'Courier New', monospace; background: #000; color: var(--gold); padding: 15px 30px; border-radius: 8px; letter-spacing: 5px; font-size: 2.5rem; border: 2px solid var(--gold); margin: 20px 0; font-weight: bold; }
+        .btn { background: var(--gold); color: #3e2e14; padding: 15px 30px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        input { padding: 15px; text-align: center; border-radius: 8px; background: #111; color: white; border: 1px solid var(--border); width: 200px; margin-bottom:10px; }
+        
+        /* Chat */
+        #chat-container { position: fixed; bottom: 10px; right: 10px; width: 250px; height: 300px; background: var(--card); border: 1px solid var(--border); display: flex; flex-direction: column; border-radius: 8px; z-index: 90; }
+        #chat-msgs { flex-grow: 1; overflow-y: scroll; padding: 10px; font-size: 12px; }
+        #chat-input { border: none; padding: 10px; background: var(--dark); color: white; border-top: 1px solid var(--border); }
+        
+        .spinner { display: inline-block; width: 30px; height: 30px; border: 4px solid rgba(238, 194, 126, 0.3); border-radius: 50%; border-top-color: var(--gold); animation: spin 1s ease-in-out infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
     <div id="setup">
-        <h1 style="color: #eec27e">LOBBY</h1>
-        <div id="my-id" style="font-size:3rem; margin:10px;">...</div>
-        <input type="number" id="join-id" style="padding:15px; text-align:center; margin-bottom:10px;">
+        <h1 style="color:var(--gold)">CHECKERS</h1>
+        <div id="my-id"><span class="spinner"></span></div>
+        <input type="number" id="join-id" placeholder="Friend's Code">
         <button class="btn" onclick="connect()">JOIN</button>
-        <button onclick="start()" style="margin-top:20px; color:#eec27e; background:none; border:none;">Practice</button>
     </div>
-    <div id="turn" style="background:#161b22; width:100%; padding:15px; text-align:center; border-bottom:2px solid #eec27e;">WAITING...</div>
+
+    <div id="turn" style="background:var(--card); width:100%; padding:15px; text-align:center; color:var(--gold); font-weight:bold; border-bottom:2px solid var(--gold);">WAITING...</div>
     <div id="board"></div>
+
+    <div id="chat-container">
+        <div id="chat-msgs"></div>
+        <input type="text" id="chat-input" placeholder="Type message...">
+    </div>
+
 <script>
     const boardEl = document.getElementById('board');
+    const chatMsgs = document.getElementById('chat-msgs');
+    const chatInput = document.getElementById('chat-input');
     let game = [['','b','','b','','b','','b'],['b','','b','','b','','b',''],['','b','','b','','b','','b'],['','','','','','','',''],['','','','','','','',''],['w','','w','','w','','w',''],['','w','','w','','w','','w'],['w','','w','','w','','w','']];
     let isMyTurn = true, myCol = 'w', conn = null, sel = null;
+    
     const peer = new Peer(Math.floor(1000 + Math.random()*9000).toString());
-    peer.on('open', id => document.getElementById('my-id').innerText = id);
-    peer.on('connection', c => { conn = c; isMyTurn = true; myCol = 'w'; start(); });
-    function connect() { const tid = document.getElementById('join-id').value; conn = peer.connect(tid); myCol = 'b'; isMyTurn = false; start(); }
-    function start() { document.getElementById('setup').style.display='none'; if(conn) conn.on('data', d => { game = d.game; isMyTurn = true; render(); }); render(); }
+    
+    peer.on('open', id => document.getElementById('my-id').innerHTML = `<div class="code-display">${id}</div>`);
+    peer.on('connection', c => { conn = c; isMyTurn = true; myCol = 'w'; setupConn(); start(); });
+    
+    function connect() { const tid = document.getElementById('join-id').value; conn = peer.connect(tid); myCol = 'b'; isMyTurn = false; setupConn(); start(); }
+    
+    function setupConn() {
+        conn.on('open', () => {
+            conn.on('data', d => {
+                if(d.type === 'CHAT') {
+                    addMessage('Friend', d.msg);
+                } else {
+                    game = d.game; isMyTurn = true; render();
+                }
+            });
+        });
+    }
+
+    function start() { document.getElementById('setup').style.display='none'; render(); }
+
+    // Chat Logic
+    chatInput.addEventListener('keypress', (e) => {
+        if(e.key === 'Enter' && conn) {
+            const msg = chatInput.value;
+            if(msg.trim() === "") return;
+            conn.send({type: 'CHAT', msg: msg});
+            addMessage('You', msg);
+            chatInput.value = '';
+        }
+    });
+
+    function addMessage(user, msg) {
+        chatMsgs.innerHTML += `<div><strong>${user}:</strong> ${msg}</div>`;
+        chatMsgs.scrollTop = chatMsgs.scrollHeight;
+    }
+    
     function isValid(fr, fc, tr, tc) {
         const p = game[fr][fc], dr = tr - fr, dc = Math.abs(tc - fc);
         const isK = p.includes('K'), type = p[0], fwd = (type === 'w' || isK) && dr < 0, bwd = (type === 'b' || isK) && dr > 0;
