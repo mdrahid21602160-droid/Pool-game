@@ -17,9 +17,24 @@
             padding: 20px;
         }
 
-        .hub-header { text-align: center; margin-top: 40px; margin-bottom: 20px; }
-        h1 { color: #eec27e; font-size: clamp(2.5rem, 8vw, 4rem); margin: 0; text-shadow: 0 0 20px rgba(238, 194, 126, 0.3); }
-        .subtitle { color: #8b949e; font-size: 1.2rem; margin-bottom: 50px; }
+        .hub-header { 
+            text-align: center; 
+            margin-top: 40px; 
+            margin-bottom: 20px; 
+        }
+
+        h1 { 
+            color: #eec27e; 
+            font-size: clamp(2.5rem, 8vw, 4rem); 
+            margin: 0; 
+            text-shadow: 0 0 20px rgba(238, 194, 126, 0.3); 
+        }
+
+        .subtitle { 
+            color: #8b949e; 
+            font-size: 1.2rem; 
+            margin-bottom: 50px; 
+        }
 
         .grid { 
             display: grid; 
@@ -51,9 +66,35 @@
             background: #1c2128;
         }
 
-        .card-icon { font-size: 5rem; margin-bottom: 20px; display: block; }
-        .card-title { font-size: 1.8rem; font-weight: bold; margin-bottom: 10px; color: #eec27e; }
-        .card-desc { color: #8b949e; font-size: 1rem; line-height: 1.4; }
+        .card-icon { 
+            font-size: 5rem; 
+            margin-bottom: 20px; 
+            display: block; 
+        }
+
+        .card-title { 
+            font-size: 1.8rem; 
+            font-weight: bold; 
+            margin-bottom: 10px; 
+            color: #eec27e; 
+        }
+
+        .card-desc { 
+            color: #8b949e; 
+            font-size: 1rem; 
+            line-height: 1.4; 
+        }
+
+        .new-badge {
+            background: #238636;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
     </style>
 </head>
 <body>
@@ -64,21 +105,31 @@
     </div>
 
     <div class="grid">
+        <a href="carrom.html" class="card">
+            <span class="card-icon">🎯</span>
+            <div class="new-badge">NEW</div>
+            <div class="card-title">CARROM</div>
+            <div class="card-desc">Precision striker game with queen rules. Physics-based 2-player P2P.</div>
+        </a>
+
         <a href="pool.html" class="card">
             <span class="card-icon">🎱</span>
             <div class="card-title">POOL</div>
             <div class="card-desc">Physics-based 2D billiards. Authoritative host mode.</div>
         </a>
+
         <a href="chess.html" class="card">
             <span class="card-icon">♟</span>
             <div class="card-title">CHESS</div>
             <div class="card-desc">Classic strategy. Validated moves.</div>
         </a>
+
         <a href="checkers.html" class="card">
             <span class="card-icon">🏁</span>
             <div class="card-title">CHECKERS</div>
             <div class="card-desc">Fast-paced jumps and kinging mechanics.</div>
         </a>
+
         <a href="tictactoe.html" class="card">
             <span class="card-icon">❌</span>
             <div class="card-title">TIC-TAC-TOE</div>

@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>كيرم — Carrom P2P</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root { --gold: #eec27e; --dark: #0d1117; --card: #161b22; --border: #30363d; }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            touch-action: none;
+        }
+
+        body {
+            background: #1a2f1a;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        /* Setup Screen */
+        #setup {
+            position: fixed;
+            inset: 0;
+            background: rgba(13,17,23,0.98);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #setup h1 {
+            color: var(--gold);
+            font-size: 3rem;
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px rgba(238, 194, 126, 0.3);
+        }
+
+        .code-display {
+            font-family: 'Courier New', monospace;
+            background: #000;
+            color: var(--gold);
+            padding: 15px 30px;
+            border-radius: 8px;
+            letter-spacing: 5px;
+            font-size: 2.5rem;
+            border: 2px solid var(--gold);
+            margin: 20px 0;
+            font-weight: bold;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            border: 4px solid rgba(238, 194, 126, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--gold);
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        input {
+            padding: 15px;
+            text-align: center;
+            border-radius: 8px;
+            background: #111;
+            color: white;
+            border: 1px solid var(--gold);
+            width: 200px;
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+        }
+
+        .btn {
+            background: var(--gold);
+            color: #3e2e14;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 1.1rem;
+            margin: 5px;
+        }
+
+        .btn:hover { opacity: 0.9; transform: scale(1.05); }
+
+        /* Game UI */
+        #game-ui {
+            width: 100%;
+            padding: 10px;
+            background: var(--card);
+            border-bottom: 2px solid var(--gold);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+        }
+
+        .player-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .player-badge {
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            border: 2px solid transparent;
+        }
+
+        .player-badge.white { background: #fff; color: #000; }
+        .player-badge.black { background: #222; color: #fff; border-color: #555; }
+        .player-badge.active { box-shadow: 0 0 15px var(--gold); border-color: var(--gold); }
+
+        #turn-indicator {
+            color: var(--gold);
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        #game-container {
+            position: relative;
+            width: min(95vw, 90vh);
+            height: min(95vw, 90vh);
+            max-width: 600px;
+            max-height: 600px;
+            margin-top: 10px;
+        }
+
+        #board {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(145deg, #4a9e4d 0%, #2d6b30 100%);
+            border: 12px solid #5d4037;
+            border-radius: 25px;
+            position: relative;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.8);
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+            touch-action: none;
+        }
+
+        canvas:active { cursor: grabbing; }
+
+        .pocket {
+            position: absolute;
+            width: 45px;
+            height: 45px;
+            background: radial-gradient(circle at 30% 30%, #333, #111);
+            border-radius: 50%;
+            box-shadow: inset 0 0 15px #000;
+            border: 2px solid #5d4037;
+            z-index: 5;
+        }
+
+        .pocket.tl { top: -12px; left: -12px; }
+        .pocket.tr { top: -12px; right: -12px; }
+        .pocket.bl { bottom: -12px; left: -12px; }
+        .pocket.br { bottom: -12px; right: -12px; }
+
+        #power-meter {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 180px;
+            height: 10px;
+            background: rgba(0,0,0,0.6);
+            border-radius: 20px;
+            overflow: hidden;
+            display: none;
+            border: 2px solid var(--gold);
+            z-index: 10;
+        }
+
+        #power-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #00ff00, #ffff00, #ff0000);
+            transition: width 0.05s;
+        }
+
+        #msg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9);
+            color: var(--gold);
+            padding: 20px 40px;
+            border-radius: 50px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            pointer-events: none;
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 20;
+            border: 2px solid var(--gold);
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        #msg.show { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+
+        /* Chat */
+        #chat-container {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            width: 250px;
+            height: 200px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            border-radius: 8px;
+            z-index: 90;
+        }
+
+        #chat-msgs {
+            flex-grow: 1;
+            overflow-y: scroll;
+            padding: 10px;
+            font-size: 12px;
+        }
+
+        #chat-input {
+            border: none;
+            padding: 10px;
+            background: var(--dark);
+            color: white;
+            border-top: 1px solid var(--border);
+            border-radius: 0 0 8px 8px;
+        }
+
+        #end-screen {
+            position: fixed;
+            inset: 0;
+            background: rgba(13,17,23,0.98);
+            z-index: 100;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #end-screen h1 {
+            font-size: 3rem;
+            color: var(--gold);
+            margin-bottom: 30px;
+        }
+
+        .score-big {
+            font-size: 2rem;
+            margin: 20px;
+            color: white;
+        }
+
+        @media (max-width: 600px) {
+            #setup h1 { font-size: 2rem; }
+            .code-display { font-size: 1.8rem; padding: 10px 20px; }
+            #game-ui { font-size: 12px; }
+            .player-badge { padding: 5px 10px; }
+            #chat-container { width: 200px; height: 150px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Setup Screen -->
+    <div id="setup">
+        <h1>🎯 كيرم — Carrom P2P</h1>
+        <div id="my-id"><span class="spinner"></span></div>
+        <p style="color: #aaa; margin: 10px 0;">Share your code with friend</p>
+        <input type="number" id="join-id" placeholder="Enter Friend's Code">
+        <button class="btn" onclick="connect()">JOIN MATCH</button>
+        <button onclick="startSolo()" style="margin-top:20px; color:white; background:none; border:none; cursor:pointer; opacity:0.7;">Practice Solo</button>
+    </div>
+
+    <!-- End Screen -->
+    <div id="end-screen">
+        <h1 id="end-msg">🏆 WINNER!</h1>
+        <div class="score-big" id="final-score"></div>
+        <button class="btn" onclick="location.reload()">PLAY AGAIN</button>
+    </div>
+
+    <!-- Game UI -->
+    <div id="game-ui" style="display:none;">
+        <div class="player-info">
+            <div class="player-badge white" id="badge-white">⚪ YOU: 0</div>
+        </div>
+        <div id="turn-indicator">WAITING...</div>
+        <div class="player-info">
+            <div class="player-badge black" id="badge-black">⚫ OPP: 0</div>
+        </div>
+    </div>
+
+    <!-- Game Container -->
+    <div id="game-container" style="display:none;">
+        <div id="board">
+            <div class="pocket tl"></div>
+            <div class="pocket tr"></div>
+            <div class="pocket bl"></div>
+            <div class="pocket br"></div>
+            
+            <canvas id="c"></canvas>
+            <div id="msg"></div>
+            <div id="power-meter"><div id="power-fill"></div></div>
+        </div>
+    </div>
+
+    <!-- Chat -->
+    <div id="chat-container" style="display:none;">
+        <div id="chat-msgs"></div>
+        <input type="text" id="chat-input" placeholder="Type message...">
+    </div>
+
+<script>
+const Engine = Matter.Engine,
+      World = Matter.World,
+      Bodies = Matter.Bodies,
+      Body = Matter.Body,
+      Events = Matter.Events,
+      Vector = Matter.Vector;
+
+const BOARD = 500;
+const PIECE_R = 9;
+const QUEEN_R = 10;
+const STRIKER_R = 15;
+const POCKET_R = 20;
+const TOUCH_AREA = 60;
+
+// P2P Variables
+let peer = null;
+let conn = null;
+let myId = null;
+let isHost = false;
+
+// Game Variables
+let engine, world;
+let canvas, ctx;
+let scale = 1;
+let striker = null;
+let pieces = [];
+let queen = null;
+let gameActive = false;
+
+// Player State
+let myColor = null; // 'white' or 'black'
+let currentPlayer = 'white';
+let scores = { white: 0, black: 0 };
+let isMyTurn = false;
+
+// Input
+let isDragging = false;
+let dragStart = null;
+let dragPos = null;
+let touchId = null;
+
+// Sync
+let lastSyncTime = 0;
+let syncInterval = null;
+
+// Initialize PeerJS
+function initPeer() {
+    peer = new Peer(Math.floor(1000 + Math.random() * 9000).toString());
+    
+    peer.on('open', id => {
+        myId = id;
+        document.getElementById('my-id').innerHTML = `<div class="code-display">${id}</div>`;
+    });
+    
+    peer.on('connection', connection => {
+        // Host receives connection
+        isHost = true;
+        myColor = 'white';
+        conn = connection;
+        setupConnection();
+        startGame();
+    });
+    
+    peer.on('error', err => {
+        console.error('Peer error:', err);
+        showMessage('Connection error!');
+    });
+}
+
+// Connect to peer
+function connect() {
+    const friendId = document.getElementById('join-id').value;
+    if (!friendId) return;
+    
+    isHost = false;
+    myColor = 'black';
+    conn = peer.connect(friendId);
+    setupConnection();
+}
+
+// Setup P2P connection
+function setupConnection() {
+    conn.on('open', () => {
+        console.log('Connected to peer!');
+        if (!isHost) startGame();
+    });
+    
+    conn.on('data', data => {
+        handleNetworkData(data);
+    });
+    
+    conn.on('close', () => {
+        if (gameActive) {
+            alert('Opponent disconnected!');
+            location.reload();
+        }
+    });
+    
+    conn.on('error', err => {
+        console.error('Connection error:', err);
+    });
+}
+
+// Handle incoming data
+function handleNetworkData(data) {
+    switch(data.type) {
+        case 'SYNC':
+            // Sync game state
+            if (data.balls) {
+                syncGameState(data.balls);
+            }
+            if (data.scores) {
+                scores = data.scores;
+                updateUI();
+            }
+            if (data.currentPlayer !== undefined) {
+                currentPlayer = data.currentPlayer;
+                isMyTurn = (currentPlayer === myColor);
+                updateTurnIndicator();
+            }
+            break;
+            
+        case 'SHOOT':
+            // Remote player shot
+            if (data.force && data.angle && striker) {
+                applyRemoteShot(data.force, data.angle);
+            }
+            break;
+            
+        case 'CHAT':
+            addMessage('Opponent', data.msg);
+            break;
+            
+        case 'WIN':
+            endGame(false);
+            break;
+    }
+}
+
+// Sync game state
+function syncGameState(ballsData) {
+    // Update positions from host
+    ballsData.forEach((ballData, i) => {
+        if (i < pieces.length) {
+            Body.setPosition(pieces[i], { x: ballData.x, y: ballData.y });
+            Body.setVelocity(pieces[i], { x: ballData.vx, y: ballData.vy });
+        }
+    });
+}
+
+// Apply remote shot
+function applyRemoteShot(force, angle) {
+    Body.applyForce(striker, striker.position, {
+        x: Math.cos(angle) * force,
+        y: Math.sin(angle) * force
+    });
+    isMyTurn = false;
+    setTimeout(waitForStop, 400);
+}
+
+// Start solo practice
+function startSolo() {
+    isHost = true;
+    myColor = 'white';
+    startGame();
+}
+
+// Start game
+function startGame() {
+    document.getElementById('setup').style.display = 'none';
+    document.getElementById('game-ui').style.display = 'flex';
+    document.getElementById('game-container').style.display = 'block';
+    document.getElementById('chat-container').style.display = 'flex';
+    
+    gameActive = true;
+    isMyTurn = (myColor === 'white');
+    currentPlayer = 'white';
+    scores = { white: 0, black: 0 };
+    
+    initGame();
+    updateUI();
+    updateTurnIndicator();
+    
+    // Start sync loop for host
+    if (isHost || conn) {
+        syncInterval = setInterval(() => {
+            if (conn && conn.open && isHost) {
+                broadcastState();
+            }
+        }, 50);
+    }
+}
+
+// Broadcast state to peer
+function broadcastState() {
+    if (!conn || !conn.open) return;
+    
+    const ballsData = pieces.map(p => ({
+        x: p.position.x,
+        y: p.position.y,
+        vx: p.velocity.x,
+        vy: p.velocity.y
+    }));
+    
+    conn.send({
+        type: 'SYNC',
+        balls: ballsData,
+        scores: scores,
+        currentPlayer: currentPlayer
+    });
+}
+
+// Initialize Matter.js game
+function initGame() {
+    canvas = document.getElementById('c');
+    ctx = canvas.getContext('2d');
+    
+    resize();
+    window.addEventListener('resize', resize);
+    
+    engine = Engine.create();
+    engine.gravity.y = 0;
+    engine.world.gravity.y = 0;
+    world = engine.world;
+    
+    createBoard();
+    createPieces();
+    createStriker();
+    
+    // Input
+    canvas.addEventListener('mousedown', onDown, {passive: false});
+    canvas.addEventListener('touchstart', onDown, {passive: false});
+    canvas.addEventListener('mousemove', onMove, {passive: false});
+    canvas.addEventListener('touchmove', onMove, {passive: false});
+    canvas.addEventListener('mouseup', onUp, {passive: false});
+    canvas.addEventListener('touchend', onUp, {passive: false});
+    canvas.addEventListener('touchcancel', onUp, {passive: false});
+    canvas.addEventListener('mouseleave', onUp);
+    
+    Events.on(engine, 'beforeUpdate', checkPockets);
+    
+    Engine.run(engine);
+    requestAnimationFrame(draw);
+    
+    // Chat
+    document.getElementById('chat-input').addEventListener('keypress', e => {
+        if (e.key === 'Enter') {
+            const msg = e.target.value.trim();
+            if (msg && conn) {
+                conn.send({ type: 'CHAT', msg: msg });
+                addMessage('You', msg);
+                e.target.value = '';
+            }
+        }
+    });
+}
+
+function resize() {
+    const board = document.getElementById('board');
+    const w = board.clientWidth - 6;
+    canvas.width = w;
+    canvas.height = w;
+    scale = w / BOARD;
+}
+
+function createBoard() {
+    const w = BOARD;
+    const t = 15;
+    
+    World.add(world, [
+        Bodies.rectangle(w/2, -t/2, w, t, { isStatic: true, label: 'wall', restitution: 0.8 }),
+        Bodies.rectangle(w/2, w+t/2, w, t, { isStatic: true, label: 'wall', restitution: 0.8 }),
+        Bodies.rectangle(-t/2, w/2, t, w, { isStatic: true, label: 'wall', restitution: 0.8 }),
+        Bodies.rectangle(w+t/2, w/2, t, w, { isStatic: true, label: 'wall', restitution: 0.8 })
+    ]);
+    
+    const offset = 28;
+    World.add(world, [
+        Bodies.circle(offset, offset, POCKET_R, { isStatic: true, isSensor: true, label: 'pocket' }),
+        Bodies.circle(w-offset, offset, POCKET_R, { isStatic: true, isSensor: true, label: 'pocket' }),
+        Bodies.circle(offset, w-offset, POCKET_R, { isStatic: true, isSensor: true, label: 'pocket' }),
+        Bodies.circle(w-offset, w-offset, POCKET_R, { isStatic: true, isSensor: true, label: 'pocket' })
+    ]);
+}
+
+function createPieces() {
+    pieces.forEach(p => World.remove(world, p));
+    pieces = [];
+    
+    const cx = BOARD/2;
+    const cy = BOARD/2;
+    
+    const create = (x, y, type, isQueen = false) => {
+        const r = isQueen ? QUEEN_R : PIECE_R;
+        const body = Bodies.circle(x, y, r, {
+            restitution: 0.9,
+            frictionAir: 0.012,
+            friction: 0.1,
+            density: 0.001,
+            label: isQueen ? 'queen' : type
+        });
+        World.add(world, body);
+        pieces.push(body);
+        return body;
+    };
+    
+    queen = create(cx, cy, null, true);
+    
+    for (let i = 0; i < 6; i++) {
+        const a = (i/6) * Math.PI * 2;
+        create(cx + Math.cos(a)*28, cy + Math.sin(a)*28, i%2===0?'white':'black');
+    }
+    
+    for (let i = 0; i < 12; i++) {
+        const a = (i/12) * Math.PI * 2 + Math.PI/12;
+        create(cx + Math.cos(a)*52, cy + Math.sin(a)*52, i%2===0?'black':'white');
+    }
+}
+
+function createStriker() {
+    if (striker) {
+        World.remove(world, striker);
+        striker = null;
+    }
+    
+    const x = BOARD/2;
+    const y = (currentPlayer === 'white') ? BOARD - 70 : 70;
+    
+    striker = Bodies.circle(x, y, STRIKER_R, {
+        restitution: 0.9,
+        frictionAir: 0.008,
+        density: 0.003,
+        friction: 0.1,
+        label: 'striker'
+    });
+    
+    World.add(world, striker);
+}
+
+// ===== INPUT =====
+
+function getPos(e) {
+    const r = canvas.getBoundingClientRect();
+    let clientX, clientY;
+    
+    if (e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+    } else if (e.changedTouches && e.changedTouches.length > 0) {
+        clientX = e.changedTouches[0].clientX;
+        clientY = e.changedTouches[0].clientY;
+    } else {
+        clientX = e.clientX;
+        clientY = e.clientY;
+    }
+    
+    return {
+        x: (clientX - r.left) / scale,
+        y: (clientY - r.top) / scale
+    };
+}
+
+function onDown(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!isMyTurn || !gameActive || !striker) return;
+    
+    const p = getPos(e);
+    
+    if (striker.isSleeping) {
+        Body.setSleeping(striker, false);
+    }
+    
+    const dist = Math.hypot(p.x - striker.position.x, p.y - striker.position.y);
+    
+    if (dist < TOUCH_AREA) {
+        isDragging = true;
+        dragStart = { x: striker.position.x, y: striker.position.y };
+        dragPos = p;
+        touchId = e.touches ? e.touches[0].identifier : 'mouse';
+        
+        document.getElementById('power-meter').style.display = 'block';
+        canvas.style.cursor = 'grabbing';
+        
+        if (navigator.vibrate) navigator.vibrate(10);
+    }
+}
+
+function onMove(e) {
+    if (!isDragging) return;
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (e.touches && e.touches.length > 0) {
+        const touch = Array.from(e.touches).find(t => t.identifier === touchId);
+        if (!touch) return;
+    }
+    
+    dragPos = getPos(e);
+    
+    const dx = dragStart.x - dragPos.x;
+    const dy = dragStart.y - dragPos.y;
+    const power = Math.min(Math.hypot(dx, dy), 150);
+    document.getElementById('power-fill').style.width = (power / 150 * 100) + '%';
+}
+
+function onUp(e) {
+    if (!isDragging) return;
+    
+    if (e.changedTouches && e.changedTouches.length > 0) {
+        const touch = Array.from(e.changedTouches).find(t => t.identifier === touchId);
+        if (!touch) return;
+    }
+    
+    isDragging = false;
+    touchId = null;
+    document.getElementById('power-meter').style.display = 'none';
+    document.getElementById('power-fill').style.width = '0%';
+    canvas.style.cursor = 'grab';
+    
+    const dx = dragStart.x - dragPos.x;
+    const dy = dragStart.y - dragPos.y;
+    const dist = Math.hypot(dx, dy);
+    
+    if (dist < 15) return;
+    
+    const force = Math.min(dist * 0.0007, 0.08);
+    const angle = Math.atan2(dy, dx);
+    
+    // Apply shot locally
+    Body.applyForce(striker, striker.position, {
+        x: Math.cos(angle) * force,
+        y: Math.sin(angle) * force
+    });
+    
+    // Send to opponent
+    if (conn && conn.open) {
+        conn.send({
+            type: 'SHOOT',
+            force: force,
+            angle: angle
+        });
+    }
+    
+    isMyTurn = false;
+    updateTurnIndicator();
+    setTimeout(waitForStop, 400);
+}
+
+function waitForStop() {
+    const check = setInterval(() => {
+        let moving = striker && striker.speed > 0.02;
+        for (let p of pieces) {
+            if (p.speed > 0.02) { moving = true; break; }
+        }
+        
+        if (!moving) {
+            clearInterval(check);
+            endTurn();
+        }
+    }, 100);
+}
+
+// ===== GAME LOGIC =====
+
+function checkPockets() {
+    const pockets = world.bodies.filter(b => b.label === 'pocket');
+    
+    if (striker) {
+        for (let hole of pockets) {
+            const d = Math.hypot(striker.position.x - hole.position.x, striker.position.y - hole.position.y);
+            if (d < POCKET_R - 2 && !striker.pocketed) {
+                striker.pocketed = true;
+            }
+        }
+    }
+    
+    for (let piece of pieces) {
+        if (piece.pocketed) continue;
+        for (let hole of pockets) {
+            const d = Math.hypot(piece.position.x - hole.position.x, piece.position.y - hole.position.y);
+            if (d < POCKET_R - 2) {
+                piece.pocketed = true;
+            }
+        }
+    }
+}
+
+function endTurn() {
+    const pocketed = pieces.filter(p => p.pocketed);
+    const strikerPocketed = striker && striker.pocketed;
+    
+    let myPieces = 0;
+    let otherPieces = 0;
+    let queenPocketed = false;
+    
+    pocketed.forEach(p => {
+        World.remove(world, p);
+        pieces = pieces.filter(x => x !== p);
+        
+        if (p.label === currentPlayer) {
+            myPieces++;
+            scores[currentPlayer]++;
+        } else if (p.label === 'queen') {
+            queenPocketed = true;
+        } else {
+            otherPieces++;
+        }
+    });
+    
+    if (strikerPocketed) {
+        if (scores[currentPlayer] > 0) scores[currentPlayer]--;
+        World.remove(world, striker);
+        striker = null;
+        showMessage("⚠️ خطأ! المضرب في الجيب");
+    }
+    
+    if (queenPocketed) {
+        if (myPieces > 0) {
+            scores[currentPlayer] += 5;
+            showMessage("👑 الملكة مغطاة! +5");
+        } else {
+            showMessage("⚠️ يجب تغطية الملكة!");
+            setTimeout(() => {
+                queen = Bodies.circle(BOARD/2, BOARD/2, QUEEN_R, {
+                    restitution: 0.9, frictionAir: 0.012, label: 'queen'
+                });
+                World.add(world, queen);
+                pieces.push(queen);
+            }, 200);
+        }
+    }
+    
+    // Check win
+    if (scores.white >= 9) {
+        endGame(myColor === 'white');
+        return;
+    } else if (scores.black >= 9) {
+        endGame(myColor === 'black');
+        return;
+    }
+    
+    updateUI();
+    broadcastState();
+    
+    const foul = strikerPocketed || otherPieces > 0;
+    const continueTurn = !foul && myPieces > 0;
+    
+    setTimeout(() => {
+        if (!striker) createStriker();
+        
+        if (continueTurn) {
+            // Same player continues
+            isMyTurn = (currentPlayer === myColor);
+            showMessage(isMyTurn ? "⚡ استمر أنت!" : "⚡ خصمك يستمر!");
+        } else {
+            // Switch player
+            currentPlayer = (currentPlayer === 'white') ? 'black' : 'white';
+            isMyTurn = (currentPlayer === myColor);
+            showMessage(isMyTurn ? "🎯 دورك!" : "🎯 دور الخصم!");
+        }
+        
+        createStriker();
+        updateTurnIndicator();
+        broadcastState();
+    }, strikerPocketed ? 700 : 150);
+}
+
+function updateUI() {
+    const whiteLabel = myColor === 'white' ? '⚪ YOU' : '⚪ OPP';
+    const blackLabel = myColor === 'black' ? '⚫ YOU' : '⚫ OPP';
+    
+    document.getElementById('badge-white').textContent = `${whiteLabel}: ${scores.white}`;
+    document.getElementById('badge-black').textContent = `${blackLabel}: ${scores.black}`;
+    
+    document.getElementById('badge-white').classList.toggle('active', currentPlayer === 'white');
+    document.getElementById('badge-black').classList.toggle('active', currentPlayer === 'black');
+}
+
+function updateTurnIndicator() {
+    const indicator = document.getElementById('turn-indicator');
+    if (isMyTurn) {
+        indicator.textContent = "★ YOUR TURN ★";
+        indicator.style.color = "#00ff00";
+    } else {
+        indicator.textContent = "OPPONENT'S TURN";
+        indicator.style.color = "#ff6666";
+    }
+}
+
+function showMessage(text) {
+    const el = document.getElementById('msg');
+    el.textContent = text;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+function addMessage(user, msg) {
+    const chatMsgs = document.getElementById('chat-msgs');
+    chatMsgs.innerHTML += `<div><strong>${user}:</strong> ${msg}</div>`;
+    chatMsgs.scrollTop = chatMsgs.scrollHeight;
+}
+
+function endGame(win) {
+    gameActive = false;
+    clearInterval(syncInterval);
+    
+    const endScreen = document.getElementById('end-screen');
+    const endMsg = document.getElementById('end-msg');
+    const finalScore = document.getElementById('final-score');
+    
+    if (win) {
+        endMsg.textContent = "🏆 YOU WIN!";
+    } else {
+        endMsg.textContent = "😢 YOU LOSE!";
+    }
+    
+    finalScore.innerHTML = `⚪ ${scores.white} — ${scores.black} ⚫`;
+    endScreen.style.display = 'flex';
+    
+    if (conn && conn.open) {
+        conn.send({ type: 'WIN' });
+    }
+}
+
+// ===== RENDER =====
+
+function draw() {
+    const s = scale;
+    const w = canvas.width;
+    
+    const gradient = ctx.createRadialGradient(w/2, w/2, 0, w/2, w/2, w/2);
+    gradient.addColorStop(0, '#4a9e4d');
+    gradient.addColorStop(1, '#2d6b30');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, w, w);
+    
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(w/2, w/2, 45*s, 0, Math.PI*2);
+    ctx.stroke();
+    
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(w/2, w/2, 25*s, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(w/2, w/2, 50*s, 0, Math.PI*2);
+    ctx.stroke();
+    
+    ctx.strokeStyle = 'rgba(255,0,0,0.3)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(w/2 - 30*s, w/2);
+    ctx.lineTo(w/2 + 30*s, w/2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(w/2, w/2 - 30*s);
+    ctx.lineTo(w/2, w/2 + 30*s);
+    ctx.stroke();
+    
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.beginPath();
+    ctx.moveTo(w/2 - 40*s, 70*s);
+    ctx.lineTo(w/2 + 40*s, 70*s);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(w/2 - 40*s, (BOARD-70)*s);
+    ctx.lineTo(w/2 + 40*s, (BOARD-70)*s);
+    ctx.stroke();
+    
+    world.bodies.forEach(b => {
+        if (b.label === 'pocket' || b.label === 'wall') return;
+        
+        const x = b.position.x * s;
+        const y = b.position.y * s;
+        const r = b.circleRadius * s;
+        
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.beginPath();
+        ctx.arc(x+2, y+2, r, 0, Math.PI*2);
+        ctx.fill();
+        
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI*2);
+        
+        if (b.label === 'striker') {
+            const gradient = ctx.createRadialGradient(x-3, y-3, 0, x, y, r);
+            gradient.addColorStop(0, '#ffffff');
+            gradient.addColorStop(1, '#cccccc');
+            ctx.fillStyle = gradient;
+            ctx.fill();
+            ctx.strokeStyle = '#999';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            
+            if (isMyTurn && !isDragging) {
+                ctx.strokeStyle = 'rgba(0,255,0,0.3)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(x, y, TOUCH_AREA * s, 0, Math.PI*2);
+                ctx.stroke();
+            }
+        } else if (b.label === 'white') {
+            const gradient = ctx.createRadialGradient(x-3, y-3, 0, x, y, r);
+            gradient.addColorStop(0, '#ffffff');
+            gradient.addColorStop(1, '#dddddd');
+            ctx.fillStyle = gradient;
+            ctx.fill();
+        } else if (b.label === 'black') {
+            const gradient = ctx.createRadialGradient(x-2, y-2, 0, x, y, r);
+            gradient.addColorStop(0, '#333333');
+            gradient.addColorStop(1, '#111111');
+            ctx.fillStyle = gradient;
+            ctx.fill();
+        } else if (b.label === 'queen') {
+            const gradient = ctx.createRadialGradient(x-3, y-3, 0, x, y, r);
+            gradient.addColorStop(0, '#ff5555');
+            gradient.addColorStop(1, '#990000');
+            ctx.fillStyle = gradient;
+            ctx.fill();
+            ctx.strokeStyle = '#ffd700';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+        
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.beginPath();
+        ctx.arc(x-r*0.3, y-r*0.3, r*0.3, 0, Math.PI*2);
+        ctx.fill();
+    });
+    
+    if (isDragging && striker) {
+        const sx = striker.position.x * s;
+        const sy = striker.position.y * s;
+        const dx = dragPos.x * s;
+        const dy = dragPos.y * s;
+        
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(sx + (sx-dx)*2, sy + (sy-dy)*2);
+        
+        const power = Math.min(Math.hypot(dragStart.x - dragPos.x, dragStart.y - dragPos.y), 150);
+        const gradient = ctx.createLinearGradient(sx, sy, sx + (sx-dx)*2, sy + (sy-dy)*2);
+        gradient.addColorStop(0, 'rgba(255,255,255,0.8)');
+        gradient.addColorStop(1, `rgba(255,${Math.floor(255-power*1.7)},0,0.8)`);
+        
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = 3;
+        ctx.setLineDash([5, 5]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+    
+    requestAnimationFrame(draw);
+}
+
+// Start
+window.onload = initPeer;
+</script>
+</body>
+</html>
