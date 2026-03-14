@@ -1,162 +1,1195 @@
+<!-- pool.html - FIXED VERSION -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Pro Pool P2P</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        :root { --gold: #eec27e; --dark: #0d1117; --card: #161b22; --border: #30363d; }
-        body { background: #050505; color: white; font-family: sans-serif; margin:0; overflow: hidden; display: flex; flex-direction: column; align-items: center; }
-        #ui { background: var(--card); width: 100%; padding: 10px; border-bottom: 2px solid var(--gold); display: flex; justify-content: space-between; box-sizing: border-box; font-size: 14px; z-index: 10; }
-        canvas { background: radial-gradient(circle, #2a8c3d, #0e4d1f); border: 8px solid #3d2616; border-radius: 8px; margin-top: 10px; touch-action: none; max-width: 98vw; height: auto; aspect-ratio: 2 / 1; }
-        #setup, #end-screen { position: fixed; inset: 0; background: rgba(13,17,23,0.98); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .code-display { font-family: 'Courier New', monospace; background: #000; color: var(--gold); padding: 15px 30px; border-radius: 8px; letter-spacing: 5px; font-size: 2.5rem; border: 2px solid var(--gold); margin: 20px 0; font-weight: bold; }
-        .btn { background: var(--gold); color: #3e2e14; padding: 12px 24px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        input { padding: 12px; border-radius: 8px; margin-bottom: 10px; text-align: center; background: #111; color: white; border: 1px solid var(--gold); width: 200px; }
-        #chat-container { position: fixed; bottom: 10px; right: 10px; width: 250px; height: 300px; background: var(--card); border: 1px solid var(--border); display: flex; flex-direction: column; border-radius: 8px; z-index: 90; }
-        #chat-msgs { flex-grow: 1; overflow-y: scroll; padding: 10px; font-size: 12px; }
-        #chat-input { border: none; padding: 10px; background: var(--dark); color: white; border-top: 1px solid var(--border); }
-        .spinner { display: inline-block; width: 30px; height: 30px; border: 4px solid rgba(238, 194, 126, 0.3); border-radius: 50%; border-top-color: var(--gold); animation: spin 1s ease-in-out infinite; }
+        :root {
+            --gold: #eec27e;
+            --dark: #0d1117;
+            --card: #161b22;
+            --border: #30363d;
+            --felt: #1a4d2e;
+            --felt-dark: #0f2e1b;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            background: var(--dark);
+            color: #c9d1d9;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        #setup {
+            position: fixed;
+            inset: 0;
+            background: rgba(13, 17, 23, 0.98);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .setup-content {
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            color: var(--gold);
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .subtitle { color: #8b949e; margin-bottom: 30px; }
+
+        .code-display {
+            font-family: 'SF Mono', monospace;
+            background: #000;
+            color: var(--gold);
+            padding: 20px 40px;
+            border-radius: 12px;
+            letter-spacing: 8px;
+            font-size: 2.2rem;
+            border: 2px solid var(--gold);
+            margin: 20px 0;
+            font-weight: bold;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin: 20px 0;
+        }
+
+        input {
+            padding: 15px;
+            text-align: center;
+            border-radius: 10px;
+            background: #111;
+            color: white;
+            border: 1px solid var(--border);
+            font-size: 1.2rem;
+        }
+
+        input:focus { outline: none; border-color: var(--gold); }
+
+        .btn {
+            background: var(--gold);
+            color: #3e2e14;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(238, 194, 126, 0.3);
+        }
+
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .btn-secondary {
+            background: transparent;
+            color: #8b949e;
+            border: 1px solid var(--border);
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(238, 194, 126, 0.2);
+            border-radius: 50%;
+            border-top-color: var(--gold);
+            animation: spin 1s linear infinite;
+        }
+
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        #game-ui {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: var(--card);
+            padding: 15px 20px;
+            border-bottom: 2px solid var(--gold);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+            font-size: 0.95rem;
+        }
+
+        .player-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .player-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .player-badge.active {
+            box-shadow: 0 0 15px var(--gold);
+            border: 2px solid var(--gold);
+        }
+
+        .solid { background: #d32f2f; color: white; }
+        .stripe { background: #ffeb3b; color: #333; }
+
+        #turn-indicator {
+            font-weight: 700;
+            color: var(--gold);
+        }
+
+        #canvas-container {
+            position: fixed;
+            top: 70px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at center, var(--felt) 0%, var(--felt-dark) 100%);
+        }
+
+        canvas {
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+            border-radius: 8px;
+            cursor: crosshair;
+            touch-action: none;
+        }
+
+        #power-meter {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 12px;
+            background: rgba(0,0,0,0.6);
+            border-radius: 20px;
+            overflow: hidden;
+            border: 2px solid var(--gold);
+            z-index: 20;
+        }
+
+        #power-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #4caf50, #ffeb3b, #f44336);
+            transition: width 0.05s;
+        }
+
+        #end-screen {
+            position: fixed;
+            inset: 0;
+            background: rgba(13, 17, 23, 0.95);
+            z-index: 100;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #end-screen h1 {
+            font-size: 3.5rem;
+            margin-bottom: 20px;
+        }
+
+        .score-display {
+            font-size: 1.5rem;
+            color: #8b949e;
+            margin-bottom: 30px;
+        }
+
+        #chat-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 280px;
+            height: 300px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            display: none;
+            flex-direction: column;
+            z-index: 90;
+        }
+
+        #chat-header {
+            padding: 12px;
+            background: rgba(238, 194, 126, 0.1);
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+            color: var(--gold);
+        }
+
+        #chat-msgs {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 10px;
+            font-size: 0.85rem;
+        }
+
+        #chat-input {
+            border: none;
+            padding: 12px;
+            background: var(--dark);
+            color: white;
+            border-top: 1px solid var(--border);
+            border-radius: 0 0 12px 12px;
+        }
+
+        .msg {
+            margin: 5px 0;
+            padding: 6px 10px;
+            border-radius: 8px;
+            max-width: 85%;
+        }
+
+        .msg.self { background: rgba(88, 166, 255, 0.15); margin-left: auto; }
+        .msg.other { background: rgba(238, 194, 126, 0.15); }
+
+        .error-toast {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #da3633;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            z-index: 200;
+            display: none;
+        }
+
+        @media (max-width: 600px) {
+            #chat-container { width: calc(100% - 40px); height: 200px; }
+        }
     </style>
 </head>
 <body>
     <div id="setup">
-        <h1 style="color: var(--gold)">POOL MASTER</h1>
-        <div id="my-id"><span class="spinner"></span></div>
-        <input type="number" id="join-id" placeholder="Friend's Code">
-        <button class="btn" onclick="connect()">JOIN MATCH</button>
-        <button onclick="start(true)" style="margin-top:20px; color:white; background:none; border:none; cursor:pointer; opacity:0.7;">Practice Solo</button>
+        <div class="setup-content">
+            <h1>🎱 Pro Pool</h1>
+            <p class="subtitle">8-Ball rules. Sink your balls, then the 8-ball.</p>
+            
+            <div id="my-id"><span class="spinner"></span></div>
+            
+            <div class="input-group">
+                <input type="text" id="join-id" placeholder="Enter 4-digit code" maxlength="4">
+                <button class="btn" id="join-btn" onclick="connect()" disabled>Join Match</button>
+                <button class="btn btn-secondary" onclick="startSolo()">Practice Solo</button>
+            </div>
+        </div>
     </div>
-    <div id="end-screen" style="display:none;">
-        <h1 id="end-msg" style="font-size: 3rem; color: var(--gold);">WINNER!</h1>
-        <button class="btn" onclick="location.reload()">PLAY AGAIN</button>
+
+    <div class="error-toast" id="error"></div>
+
+    <div id="game-ui">
+        <div class="player-info">
+            <div class="player-badge" id="p1-badge">P1</div>
+        </div>
+        <div id="turn-indicator">Waiting...</div>
+        <div class="player-info">
+            <div class="player-badge" id="p2-badge">P2</div>
+        </div>
     </div>
-    <div id="ui"><div id="turn">WAITING...</div><div id="status">BALLS: 15</div><div id="pwr" style="color:var(--gold)">POWER: 0%</div></div>
-    <canvas id="table" width="800" height="400"></canvas>
+
+    <div id="canvas-container">
+        <canvas id="table"></canvas>
+    </div>
+
+    <div id="power-meter"><div id="power-fill"></div></div>
+
+    <div id="end-screen">
+        <h1 id="end-title">Game Over</h1>
+        <div class="score-display" id="end-msg"></div>
+        <button class="btn" onclick="location.reload()">Play Again</button>
+    </div>
+
     <div id="chat-container">
+        <div id="chat-header">Chat</div>
         <div id="chat-msgs"></div>
         <input type="text" id="chat-input" placeholder="Type message...">
     </div>
-<script>
-    const canvas = document.getElementById('table'), ctx = canvas.getContext('2d'), chatMsgs = document.getElementById('chat-msgs'), chatInput = document.getElementById('chat-input');
-    let balls = [], isMyTurn = false, conn = null, moving = false, gameActive = true;
-    let mouse = {x:0, y:0, down:false}, ballsPocketedThisTurn = 0;
-    const pockets = [[0,0],[400,0],[800,0],[0,400],[400,400],[800,400]];
-    function getCoords(e) {
-        const r = canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        return { x: (clientX - r.left) * (800 / r.width), y: (clientY - r.top) * (400 / r.height) };
-    }
-    const peer = new Peer(Math.floor(1000 + Math.random()*9000).toString());
-    peer.on('open', id => document.getElementById('my-id').innerHTML = `<div class="code-display">${id}</div>`);
-    peer.on('connection', c => { conn = c; isMyTurn = true; setupConn(); start(); });
-    function connect() { const tid = document.getElementById('join-id').value; conn = peer.connect(tid); isMyTurn = false; setupConn(); start(); }
-    function setupConn() {
-        conn.on('open', () => {
-            conn.on('data', d => { 
-                if(d.type==='SYNC') { balls = d.balls; moving = d.moving; if(d.turnRequest) isMyTurn = true; }
-                else if(d.type==='WIN') endGame(false);
-                else if(d.type === 'CHAT') addMessage('Friend', d.msg);
-            });
-            // --- GRACEFUL DISCONNECT ---
-            conn.on('close', () => { alert("Friend disconnected!"); location.reload(); });
-        });
-    }
-    chatInput.addEventListener('keypress', (e) => {
-        if(e.key === 'Enter' && conn) {
-            const msg = chatInput.value;
-            if(msg.trim() === "") return;
-            conn.send({type: 'CHAT', msg: msg});
-            addMessage('You', msg);
-            chatInput.value = '';
+
+    <script>
+        // FIXED: Comprehensive game state
+        const TABLE_WIDTH = 800;
+        const TABLE_HEIGHT = 400;
+        const BALL_RADIUS = 11;
+        const POCKET_RADIUS = 28;
+        const MAX_POWER = 20;
+        const FRICTION = 0.985;
+        const STOP_THRESHOLD = 0.01;
+        
+        const POCKETS = [
+            {x: 0, y: 0}, {x: TABLE_WIDTH/2, y: 0}, {x: TABLE_WIDTH, y: 0},
+            {x: 0, y: TABLE_HEIGHT}, {x: TABLE_WIDTH/2, y: TABLE_HEIGHT}, {x: TABLE_WIDTH, y: TABLE_HEIGHT}
+        ];
+
+        const state = {
+            balls: [],
+            cueBall: null,
+            eightBall: null,
+            isMyTurn: false,
+            isHost: false,
+            isSolo: false,
+            myType: null, // 'solid' or 'stripe' or null
+            assignedType: false,
+            conn: null,
+            peer: null,
+            myId: null,
+            gameActive: false,
+            isDragging: false,
+            dragStart: null,
+            dragCurrent: null,
+            moving: false,
+            pottedThisTurn: [],
+            winner: null,
+            gameEnded: false, // FIXED: Prevent double win
+            syncInterval: null,
+            lastShotTime: 0 // FIXED: Debouncing
+        };
+
+        const canvas = document.getElementById('table');
+        const ctx = canvas.getContext('2d');
+        
+        function resize() {
+            const container = document.getElementById('canvas-container');
+            const aspect = TABLE_WIDTH / TABLE_HEIGHT;
+            let w = container.clientWidth - 40;
+            let h = w / aspect;
+            
+            if (h > container.clientHeight - 40) {
+                h = container.clientHeight - 40;
+                w = h * aspect;
+            }
+            
+            canvas.width = TABLE_WIDTH;
+            canvas.height = TABLE_HEIGHT;
+            canvas.style.width = w + 'px';
+            canvas.style.height = h + 'px';
         }
-    });
-    function addMessage(user, msg) { chatMsgs.innerHTML += `<div><strong>${user}:</strong> ${msg}</div>`; chatMsgs.scrollTop = chatMsgs.scrollHeight; }
-    function start(off=false) { document.getElementById('setup').style.display = 'none'; initRack(); if(off) isMyTurn = true; animate(); }
-    function initRack() {
-        balls = [{x:200, y:200, vx:0, vy:0, color:'#fff', type:'cue', sunk:false}];
-        for(let i=0; i<5; i++) for(let j=0; j<=i; j++) {
-            let color = (i===2 && j===1) ? '#000' : ((i+j)%2===0 ? '#f33' : '#ff3');
-            balls.push({x: 550 + i*19.5, y: 200 + j*22 - i*11, vx:0, vy:0, color: color, sunk:false});
-        }
-    }
-    const handleDown = (e) => { if(isMyTurn && !moving && gameActive) { const p = getCoords(e); mouse.x=p.x; mouse.y=p.y; mouse.down=true; } };
-    const handleMove = (e) => { const p = getCoords(e); mouse.x=p.x; mouse.y=p.y; if(e.touches) e.preventDefault(); };
-    const handleUp = () => {
-        if(mouse.down && isMyTurn) {
-            let dx = balls[0].x - mouse.x, dy = balls[0].y - mouse.y;
-            let dist = Math.hypot(dx, dy);
-            if(dist > 15) {
-                let force = Math.min(dist/10, 20);
-                balls[0].vx = (dx/dist)*force; balls[0].vy = (dy/dist)*force;
-                moving = true; mouse.down = false; ballsPocketedThisTurn = 0;
-                if(conn) conn.send({type:'SYNC', balls, moving: true, turnRequest: false});
-            } else mouse.down = false;
-        }
-    };
-    canvas.addEventListener('mousedown', handleDown); canvas.addEventListener('touchstart', handleDown, {passive:false});
-    canvas.addEventListener('mousemove', handleMove); canvas.addEventListener('touchmove', handleMove, {passive:false});
-    window.addEventListener('mouseup', handleUp); window.addEventListener('touchend', handleUp);
-    function resolvePhysics(b1, b2) {
-        let dx = b2.x-b1.x, dy = b2.y-b1.y, dist = Math.hypot(dx, dy);
-        if (dist < 22) {
-            let nx = dx/dist, ny = dy/dist, overlap = 22.1 - dist;
-            b1.x -= nx*overlap/2; b1.y -= ny*overlap/2; b2.x += nx*overlap/2; b2.y += ny*overlap/2;
-            let v1n = b1.vx*nx + b1.vy*ny, v2n = b2.vx*nx + b2.vy*ny, impulse = v1n - v2n;
-            b1.vx -= impulse*nx; b1.vy -= impulse*ny; b2.vx += impulse*nx; b2.vy += impulse*ny;
-        }
-    }
-    function endGame(win) { gameActive = false; document.getElementById('end-screen').style.display='flex'; document.getElementById('end-msg').innerText = win ? "YOU WIN!" : "YOU LOSE!"; }
-    function animate() {
-        ctx.clearRect(0,0,800,400); ctx.fillStyle = '#111'; pockets.forEach(p => { ctx.beginPath(); ctx.arc(p[0],p[1],28,0,7); ctx.fill(); });
-        let stillMoving = false;
-        for(let s=0; s<4; s++) { 
-            balls.forEach((b, i) => {
-                if(b.sunk) return;
-                b.x += b.vx/4; b.y += b.vy/4;
-                if(b.x<12 || b.x>788) b.vx *= -0.8; if(b.y<12 || b.y>388) b.vy *= -0.8;
-                pockets.forEach(p => {
-                    if(Math.hypot(b.x-p[0], b.y-p[1]) < 26) {
-                        b.sunk = true; b.vx = b.vy = 0;
-                        if(b.type === 'cue') setTimeout(() => { b.x=200; b.y=200; b.vx=0; b.vy=0; b.sunk=false; }, 500);
-                        else if(b.color === '#000') { endGame(balls.filter(v=>!v.sunk && v.type!=='cue').length===0); if(conn) conn.send({type:'WIN'}); }
-                        else ballsPocketedThisTurn++;
-                    }
-                });
-                for(let j=i+1; j<balls.length; j++) if(!balls[j].sunk) resolvePhysics(b, balls[j]);
-            });
-        }
-        balls.forEach(b => {
-            if(b.sunk) return;
-            b.vx *= 0.985; b.vy *= 0.985;
-            if(Math.hypot(b.vx, b.vy) > 0.3) stillMoving = true; else { b.vx=0; b.vy=0; }
-            ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(b.x, b.y, 11, 0, 7); ctx.fill();
-            ctx.strokeStyle = "rgba(255,255,255,0.3)"; ctx.stroke();
-        });
-        if (moving && !stillMoving) {
-            moving = false;
-            if (isMyTurn) {
-                let potSuccess = (ballsPocketedThisTurn > 0);
-                if (!potSuccess) {
-                    isMyTurn = false;
-                    if(conn) conn.send({type:'SYNC', balls, moving: false, turnRequest: true});
-                } else if(conn) conn.send({type:'SYNC', balls, moving: false, turnRequest: false});
+
+        class Ball {
+            constructor(x, y, color, type, number) {
+                this.x = x;
+                this.y = y;
+                this.vx = 0;
+                this.vy = 0;
+                this.color = color;
+                this.type = type;
+                this.number = number;
+                this.radius = BALL_RADIUS;
+                this.potted = false;
+                this.angularVelocity = 0;
+                this.id = Math.random().toString(36).substr(2, 9);
+            }
+
+            update() {
+                if (this.potted) return;
+                
+                // FIXED: Better physics integration
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                // Apply friction
+                const speed = Math.hypot(this.vx, this.vy);
+                if (speed > 0) {
+                    const frictionFactor = Math.pow(FRICTION, speed * 0.5);
+                    this.vx *= frictionFactor;
+                    this.vy *= frictionFactor;
+                    this.angularVelocity *= frictionFactor;
+                }
+                
+                // Stop if very slow
+                if (Math.abs(this.vx) < STOP_THRESHOLD) this.vx = 0;
+                if (Math.abs(this.vy) < STOP_THRESHOLD) this.vy = 0;
+                
+                // Wall collisions with improved physics
+                const restitution = 0.85;
+                if (this.x - this.radius < 0) {
+                    this.x = this.radius;
+                    this.vx = Math.abs(this.vx) * restitution;
+                    this.angularVelocity += this.vy * 0.1;
+                }
+                if (this.x + this.radius > TABLE_WIDTH) {
+                    this.x = TABLE_WIDTH - this.radius;
+                    this.vx = -Math.abs(this.vx) * restitution;
+                    this.angularVelocity -= this.vy * 0.1;
+                }
+                if (this.y - this.radius < 0) {
+                    this.y = this.radius;
+                    this.vy = Math.abs(this.vy) * restitution;
+                    this.angularVelocity -= this.vx * 0.1;
+                }
+                if (this.y + this.radius > TABLE_HEIGHT) {
+                    this.y = TABLE_HEIGHT - this.radius;
+                    this.vy = -Math.abs(this.vy) * restitution;
+                    this.angularVelocity += this.vx * 0.1;
+                }
+            }
+
+            draw(ctx) {
+                if (this.potted) return;
+                
+                // Shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.beginPath();
+                ctx.arc(this.x + 2, this.y + 2, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Ball body
+                const grad = ctx.createRadialGradient(
+                    this.x - 3, this.y - 3, 0,
+                    this.x, this.y, this.radius
+                );
+                
+                if (this.type === 'cue') {
+                    grad.addColorStop(0, '#ffffff');
+                    grad.addColorStop(1, '#cccccc');
+                } else if (this.type === 'eight') {
+                    grad.addColorStop(0, '#333333');
+                    grad.addColorStop(1, '#000000');
+                } else {
+                    grad.addColorStop(0, this.color);
+                    grad.addColorStop(1, shadeColor(this.color, -20));
+                }
+                
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Stripe
+                if (this.type === 'stripe') {
+                    ctx.save();
+                    ctx.translate(this.x, this.y);
+                    ctx.rotate(this.angularVelocity * 10);
+                    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.radius * 0.6, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = this.color;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.radius * 0.4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+                
+                // Number
+                if (this.number) {
+                    ctx.fillStyle = this.type === 'eight' ? 'white' : 'black';
+                    ctx.font = 'bold 10px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(this.number, this.x, this.y);
+                }
+                
+                // Shine
+                ctx.fillStyle = 'rgba(255,255,255,0.4)';
+                ctx.beginPath();
+                ctx.arc(this.x - 3, this.y - 3, this.radius * 0.3, 0, Math.PI * 2);
+                ctx.fill();
             }
         }
-        if(isMyTurn && !moving && !balls[0].sunk && gameActive) {
-            let dx = balls[0].x-mouse.x, dy = balls[0].y-mouse.y, ang = Math.atan2(dy, dx), dist = Math.hypot(dx, dy);
-            ctx.save(); ctx.translate(balls[0].x, balls[0].y); ctx.rotate(ang);
-            ctx.setLineDash([5,5]); ctx.strokeStyle="rgba(255,255,255,0.5)"; ctx.beginPath(); ctx.moveTo(15,0); ctx.lineTo(300,0); ctx.stroke();
-            ctx.setLineDash([]); ctx.fillStyle="#5d3a1a"; let pull = mouse.down ? Math.min(dist/5, 45) : 0;
-            ctx.fillRect(-40-pull, -4, 250, 8); ctx.restore();
-            document.getElementById('pwr').innerText = "POWER: " + Math.round(Math.min(dist/10, 20)*5) + "%";
+
+        function shadeColor(color, percent) {
+            const num = parseInt(color.replace("#",""), 16);
+            const amt = Math.round(2.55 * percent);
+            const R = Math.max(0, Math.min(255, (num >> 16) + amt));
+            const G = Math.max(0, Math.min(255, ((num >> 8) & 0x00FF) + amt));
+            const B = Math.max(0, Math.min(255, (num & 0x0000FF) + amt));
+            return "#" + (0x1000000 + R*0x10000 + G*0x100 + B).toString(16).slice(1);
         }
-        document.getElementById('turn').innerText = isMyTurn ? "★ YOUR TURN ★" : "OPPONENT'S TURN";
-        document.getElementById('status').innerText = "BALLS: " + (balls.filter(b=>!b.sunk && b.color!=='#fff').length);
-        if(gameActive) requestAnimationFrame(animate);
-    }
-</script>
+
+        function checkBallCollision(b1, b2) {
+            const dx = b2.x - b1.x;
+            const dy = b2.y - b1.y;
+            const dist = Math.hypot(dx, dy);
+            
+            if (dist < b1.radius + b2.radius && dist > 0) {
+                // Separate balls
+                const overlap = (b1.radius + b2.radius - dist) / 2;
+                const nx = dx / dist;
+                const ny = dy / dist;
+                
+                b1.x -= nx * overlap;
+                b1.y -= ny * overlap;
+                b2.x += nx * overlap;
+                b2.y += ny * overlap;
+                
+                // Elastic collision with angular momentum transfer
+                const v1n = b1.vx * nx + b1.vy * ny;
+                const v2n = b2.vx * nx + b2.vy * ny;
+                const v1t = b1.vx * -ny + b1.vy * nx;
+                const v2t = b2.vx * -ny + b2.vy * nx;
+                
+                const restitution = 0.9;
+                const m1 = 1, m2 = 1;
+                
+                const v1nFinal = (v1n * (m1 - m2) + 2 * m2 * v2n) / (m1 + m2) * restitution;
+                const v2nFinal = (v2n * (m2 - m1) + 2 * m1 * v1n) / (m1 + m2) * restitution;
+                
+                b1.vx = v1nFinal * nx + v1t * -ny;
+                b1.vy = v1nFinal * ny + v1t * nx;
+                b2.vx = v2nFinal * nx + v2t * -ny;
+                b2.vy = v2nFinal * ny + v2t * nx;
+                
+                // Transfer some spin
+                b1.angularVelocity += (v2t - v1t) * 0.1;
+                b2.angularVelocity += (v1t - v2t) * 0.1;
+            }
+        }
+
+        function checkPockets() {
+            state.balls.forEach(ball => {
+                if (ball.potted) return;
+                
+                for (const pocket of POCKETS) {
+                    const dist = Math.hypot(ball.x - pocket.x, ball.y - pocket.y);
+                    // FIXED: More generous pocket detection
+                    if (dist < POCKET_RADIUS - 3) {
+                        ball.potted = true;
+                        ball.vx = 0;
+                        ball.vy = 0;
+                        handleBallPotted(ball);
+                        break;
+                    }
+                }
+            });
+        }
+
+        // FIXED: Proper ball potted handling with validation
+        function handleBallPotted(ball) {
+            if (state.gameEnded) return;
+            
+            state.pottedThisTurn.push(ball);
+            
+            // Assign types on first pot
+            if (!state.assignedType && !state.isSolo && ball.type !== 'cue' && ball.type !== 'eight') {
+                if (state.isMyTurn) {
+                    state.myType = ball.type;
+                    state.assignedType = true;
+                }
+                updatePlayerBadges();
+            }
+            
+            // Handle 8-ball win condition with validation
+            if (ball.type === 'eight') {
+                // FIXED: Only check win if we haven't already ended
+                if (!state.gameEnded) {
+                    const myBalls = state.balls.filter(b => b.type === state.myType && !b.potted);
+                    const isValidWin = myBalls.length === 0 && state.isMyTurn;
+                    const isValidLoss = !state.isMyTurn || myBalls.length > 0;
+                    
+                    if (isValidWin) {
+                        endGame(true, '8-ball sunk legally');
+                    } else if (isValidLoss) {
+                        endGame(false, '8-ball sunk illegally');
+                    }
+                }
+            }
+        }
+
+        function handleCueBallPotted() {
+            showError('Cue ball potted! Foul.');
+            
+            // FIXED: Proper foul handling - turn passes and ball spotted
+            if (!state.isSolo) {
+                state.isMyTurn = false;
+                if (state.conn) state.conn.send({type: 'FOUL', type: 'cue_potted'});
+            }
+            
+            // Spot cue ball after delay
+            setTimeout(() => {
+                if (state.cueBall) {
+                    // FIXED: Find valid position in "D" area (left side)
+                    let spotX = 200;
+                    let spotY = TABLE_HEIGHT / 2;
+                    
+                    // Check for collisions at spot position
+                    let attempts = 0;
+                    while (attempts < 10) {
+                        let collision = false;
+                        for (const ball of state.balls) {
+                            if (ball !== state.cueBall && !ball.potted) {
+                                const dist = Math.hypot(ball.x - spotX, ball.y - spotY);
+                                if (dist < BALL_RADIUS * 2.5) {
+                                    collision = true;
+                                    spotY += BALL_RADIUS * 3;
+                                    if (spotY > TABLE_HEIGHT - 50) {
+                                        spotY = 50;
+                                        spotX += BALL_RADIUS * 2;
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                        if (!collision) break;
+                        attempts++;
+                    }
+                    
+                    state.cueBall.potted = false;
+                    state.cueBall.x = spotX;
+                    state.cueBall.y = spotY;
+                    state.cueBall.vx = 0;
+                    state.cueBall.vy = 0;
+                    state.cueBall.angularVelocity = 0;
+                }
+            }, 1000);
+        }
+
+        function updatePlayerBadges() {
+            const p1 = document.getElementById('p1-badge');
+            const p2 = document.getElementById('p2-badge');
+            
+            if (!state.assignedType && !state.isSolo) {
+                p1.textContent = 'P1';
+                p2.textContent = 'P2';
+                return;
+            }
+            
+            if (state.isSolo) {
+                p1.className = 'player-badge solid active';
+                p1.textContent = '● Solids';
+                p2.className = 'player-badge stripe';
+                p2.textContent = '○ Stripes';
+            } else {
+                const isSolid = state.myType === 'solid';
+                if (state.isHost) {
+                    p1.className = 'player-badge solid' + (isSolid ? ' active' : '');
+                    p1.textContent = isSolid ? '● You' : '○ You';
+                    p2.className = 'player-badge stripe' + (!isSolid ? ' active' : '');
+                    p2.textContent = !isSolid ? '○ Opp' : '● Opp';
+                } else {
+                    p1.className = 'player-badge solid' + (!isSolid ? ' active' : '');
+                    p1.textContent = !isSolid ? '○ You' : '● You';
+                    p2.className = 'player-badge stripe' + (isSolid ? ' active' : '');
+                    p2.textContent = isSolid ? '● Opp' : '○ Opp';
+                }
+            }
+        }
+
+        function initRack() {
+            state.balls = [];
+            
+            state.cueBall = new Ball(200, TABLE_HEIGHT/2, '#ffffff', 'cue', null);
+            state.balls.push(state.cueBall);
+            
+            const startX = 550;
+            const startY = TABLE_HEIGHT/2;
+            const rowSpacing = BALL_RADIUS * 1.8;
+            const colSpacing = BALL_RADIUS * 2;
+            
+            const colors = [
+                '#f44336', '#ff9800', '#ffeb3b', '#4caf50', 
+                '#2196f3', '#3f51b5', '#9c27b0', '#795548'
+            ];
+            
+            let ballIndex = 0;
+            for (let row = 0; row < 5; row++) {
+                for (let col = 0; col <= row; col++) {
+                    const x = startX + row * colSpacing;
+                    const y = startY + (col - row/2) * rowSpacing;
+                    
+                    let type, color, number;
+                    if (row === 2 && col === 1) {
+                        type = 'eight';
+                        color = '#000000';
+                        number = 8;
+                        state.eightBall = new Ball(x, y, color, type, number);
+                        state.balls.push(state.eightBall);
+                    } else {
+                        const isSolid = ballIndex % 2 === 0;
+                        type = isSolid ? 'solid' : 'stripe';
+                        color = colors[ballIndex % colors.length];
+                        number = isSolid ? (Math.floor(ballIndex/2) + 1) : (Math.floor(ballIndex/2) + 9);
+                        state.balls.push(new Ball(x, y, color, type, number));
+                        ballIndex++;
+                    }
+                }
+            }
+        }
+
+        function getMousePos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = TABLE_WIDTH / rect.width;
+            const scaleY = TABLE_HEIGHT / rect.height;
+            
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
+        }
+
+        canvas.addEventListener('mousedown', onDown);
+        canvas.addEventListener('touchstart', onDown, {passive: false});
+        
+        function onDown(e) {
+            if (!state.isMyTurn || state.moving || !state.gameActive || state.gameEnded) return;
+            
+            // FIXED: Debounce shots
+            const now = Date.now();
+            if (now - state.lastShotTime < 500) return;
+            
+            const pos = getMousePos(e);
+            const dist = Math.hypot(pos.x - state.cueBall.x, pos.y - state.cueBall.y);
+            
+            if (dist < 50) {
+                state.isDragging = true;
+                state.dragStart = pos;
+                state.dragCurrent = pos;
+                document.getElementById('power-meter').style.display = 'block';
+                e.preventDefault();
+            }
+        }
+
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('touchmove', onMove, {passive: false});
+        
+        function onMove(e) {
+            if (!state.isDragging) return;
+            
+            state.dragCurrent = getMousePos(e);
+            
+            const dx = state.dragStart.x - state.dragCurrent.x;
+            const dy = state.dragStart.y - state.dragCurrent.y;
+            const power = Math.min(Math.hypot(dx, dy), 150);
+            
+            document.getElementById('power-fill').style.width = (power / 150 * 100) + '%';
+            e.preventDefault();
+        }
+
+        window.addEventListener('mouseup', onUp);
+        window.addEventListener('touchend', onUp);
+        
+        function onUp(e) {
+            if (!state.isDragging) return;
+            
+            state.isDragging = false;
+            document.getElementById('power-meter').style.display = 'none';
+            document.getElementById('power-fill').style.width = '0%';
+            
+            const dx = state.dragStart.x - state.dragCurrent.x;
+            const dy = state.dragStart.y - state.dragCurrent.y;
+            const dist = Math.hypot(dx, dy);
+            
+            if (dist > 15) {
+                const power = Math.min(dist / 15, MAX_POWER);
+                const angle = Math.atan2(dy, dx);
+                
+                state.cueBall.vx = Math.cos(angle) * power;
+                state.cueBall.vy = Math.sin(angle) * power;
+                state.moving = true;
+                state.pottedThisTurn = [];
+                state.lastShotTime = Date.now();
+                
+                if (!state.isSolo && state.conn) {
+                    state.conn.send({
+                        type: 'SHOT',
+                        vx: state.cueBall.vx,
+                        vy: state.cueBall.vy,
+                        timestamp: Date.now()
+                    });
+                }
+            }
+        }
+
+        function animate() {
+            if (!state.gameActive) return;
+            
+            ctx.clearRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
+            
+            // Draw table
+            ctx.fillStyle = '#1b5e20';
+            ctx.fillRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
+            
+            // Wood border
+            ctx.strokeStyle = '#5d4037';
+            ctx.lineWidth = 16;
+            ctx.strokeRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
+            
+            // Pockets
+            POCKETS.forEach(p => {
+                ctx.fillStyle = '#0d1117';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, POCKET_RADIUS, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#3e2723';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            });
+            
+            // Physics steps
+            let stillMoving = false;
+            
+            for (let step = 0; step < 4; step++) {
+                state.balls.forEach(b => b.update());
+                
+                for (let i = 0; i < state.balls.length; i++) {
+                    for (let j = i + 1; j < state.balls.length; j++) {
+                        checkBallCollision(state.balls[i], state.balls[j]);
+                    }
+                                    }
+                
+                checkPockets();
+            }
+            
+            // Check if any balls still moving
+            state.balls.forEach(b => {
+                if (Math.abs(b.vx) > STOP_THRESHOLD || Math.abs(b.vy) > STOP_THRESHOLD) {
+                    stillMoving = true;
+                }
+            });
+            
+            // Draw balls
+            state.balls.forEach(b => b.draw(ctx));
+            
+            // Draw aim line
+            if (state.isMyTurn && !state.moving && !state.cueBall.potted && state.isDragging) {
+                const dx = state.cueBall.x - state.dragCurrent.x;
+                const dy = state.cueBall.y - state.dragCurrent.y;
+                const angle = Math.atan2(dy, dx);
+                
+                ctx.save();
+                ctx.translate(state.cueBall.x, state.cueBall.y);
+                ctx.rotate(angle);
+                
+                ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                ctx.setLineDash([5, 5]);
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(300, 0);
+                ctx.stroke();
+                
+                ctx.restore();
+            }
+            
+            // Check turn end
+            if (state.moving && !stillMoving) {
+                state.moving = false;
+                endTurn();
+            }
+            
+            requestAnimationFrame(animate);
+        }
+
+        function endTurn() {
+            if (state.isSolo) {
+                state.isMyTurn = true;
+                updateTurnDisplay();
+                return;
+            }
+            
+            const currentPlayer = state.isMyTurn ? 'me' : 'opponent';
+            const myBallsRemaining = state.balls.filter(b => b.type === state.myType && !b.potted && b.type !== 'eight').length;
+            const pottedMyBalls = state.pottedThisTurn.filter(b => b.type === state.myType).length;
+            const pottedOpponent = state.pottedThisTurn.filter(b => b.type !== state.myType && b.type !== 'eight' && b.type !== 'cue').length;
+            const pottedCue = state.pottedThisTurn.includes(state.cueBall) || state.cueBall.potted;
+            
+            let continueTurn = false;
+            
+            if (pottedCue || pottedOpponent > 0) {
+                // Foul - turn passes
+                state.isMyTurn = false;
+            } else if (pottedMyBalls > 0) {
+                // Continue shooting
+                continueTurn = true;
+            } else {
+                // No balls potted - turn passes
+                state.isMyTurn = false;
+            }
+            
+            updateTurnDisplay();
+            
+            // Send turn pass to opponent
+            if (!continueTurn && state.conn && state.conn.open) {
+                state.conn.send({
+                    type: 'TURN_PASS',
+                    board: state.balls.map(b => ({x: b.x, y: b.y, vx: b.vx, vy: b.vy, potted: b.potted})),
+                    scores: {
+                        myType: state.myType,
+                        myBalls: state.balls.filter(b => b.type === state.myType && !b.potted).length,
+                        oppBalls: state.balls.filter(b => b.type !== state.myType && b.type !== 'cue' && b.type !== 'eight' && !b.potted).length
+                    }
+                });
+            }
+        }
+
+        function updateTurnDisplay() {
+            const indicator = document.getElementById('turn-indicator');
+            const p1Badge = document.getElementById('p1-badge');
+            const p2Badge = document.getElementById('p2-badge');
+            
+            if (!state.gameActive) return;
+            
+            if (state.isMyTurn) {
+                indicator.textContent = '★ YOUR TURN ★';
+                indicator.style.color = '#00ff00';
+                if (state.isHost || state.isSolo) {
+                    p1Badge.classList.add('active');
+                    p2Badge.classList.remove('active');
+                } else {
+                    p2Badge.classList.add('active');
+                    p1Badge.classList.remove('active');
+                }
+            } else {
+                indicator.textContent = "OPPONENT'S TURN";
+                indicator.style.color = '#ff6666';
+                if (state.isHost) {
+                    p1Badge.classList.remove('active');
+                    p2Badge.classList.add('active');
+                } else {
+                    p2Badge.classList.remove('active');
+                    p1Badge.classList.add('active');
+                }
+            }
+        }
+
+        // Networking
+        function initPeer() {
+            const randomId = Math.floor(1000 + Math.random() * 9000).toString();
+            state.peer = new Peer(randomId, {
+                debug: 1,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                }
+            });
+
+            state.peer.on('open', id => {
+                state.myId = id;
+                document.getElementById('my-id').innerHTML = `
+                    <div class="code-display">${id}</div>
+                    <p style="margin-top: 10px; color: #8b949e;">Share this code</p>
+                `;
+                document.getElementById('join-btn').disabled = false;
+            });
+
+            state.peer.on('connection', c => {
+                if (state.conn) {
+                    c.close();
+                    return;
+                }
+                state.isHost = true;
+                state.conn = c;
+                state.isMyTurn = true;
+                setupConnection();
+                startGame();
+            });
+
+            state.peer.on('error', err => {
+                let msg = 'Connection error';
+                if (err.type === 'peer-unavailable') msg = 'Player not found';
+                else if (err.type === 'network') msg = 'Network error';
+                showError(msg);
+            });
+        }
+
+        function connect() {
+            const friendId = document.getElementById('join-id').value.trim();
+            if (!friendId || friendId.length !== 4) {
+                showError('Enter valid 4-digit code');
+                return;
+            }
+
+            state.isHost = false;
+            state.conn = state.peer.connect(friendId, { reliable: true });
+            
+            document.getElementById('my-id').innerHTML = '<span class="spinner"></span> Connecting...';
+            
+            state.conn.on('open', () => {
+                state.isMyTurn = false;
+                setupConnection();
+                startGame();
+            });
+
+            setTimeout(() => {
+                if (!state.gameActive) {
+                    showError('Connection failed');
+                    document.getElementById('join-btn').disabled = false;
+                }
+            }, 10000);
+        }
+
+        function setupConnection() {
+            document.getElementById('chat-container').style.display = 'flex';
+            
+            state.conn.on('data', data => {
+                if (!data || !data.type) return;
+                
+                switch(data.type) {
+                    case 'SHOT':
+                        // Validate shot data
+                        if (data.vx !== undefined && data.vy !== undefined && data.timestamp) {
+                            // Check timestamp to prevent old shots
+                            const now = Date.now();
+                            if (now - data.timestamp < 5000) { // Within 5 seconds
+                                state.cueBall.vx = data.vx;
+                                state.cueBall.vy = data.vy;
+                                state.moving = true;
+                                state.isMyTurn = false;
+                                updateTurnDisplay();
+                                setTimeout(endTurn, 100);
+                            }
+                        }
+                        break;
+                    case 'TURN_PASS':
+                        state.isMyTurn = true;
+                        // Sync board state
+                        if (data.board) {
+                            data.board.forEach((b, i) => {
+                                if (i < state.balls.length) {
+                                    state.balls[i].x = b.x;
+                                    state.balls[i].y = b.y;
+                                    state.balls[i].vx = b.vx;
+                                    state.balls[i].vy = b.vy;
+                                    state.balls[i].potted = b.potted;
+                                }
+                            });
+                        }
+                        updateTurnDisplay();
+                        break;
+                    case 'FOUL':
+                        if (data.type === 'cue_potted') {
+                            handleCueBallPotted();
+                        }
+                        break;
+                    case 'WIN':
+                        if (!state.gameEnded) {
+                            endGame(false, 'Opponent sunk 8-ball');
+                        }
+                        break;
+                    case 'CHAT':
+                        addChatMessage(data.msg, false);
+                        break;
+                }
+            });
+
+            state.conn.on('close', () => {
+                showError('Opponent disconnected');
+                state.gameActive = false;
+            });
+
+            // Host sync loop - more efficient
+            if (state.isHost) {
+                state.syncInterval = setInterval(() => {
+                    if (state.conn && state.conn.open && state.moving) {
+                        state.conn.send({
+                            type: 'SYNC',
+                            balls: state.balls.map(b => ({
+                                x: b.x, y: b.y, vx: b.vx, vy: b.vy, potted: b.potted
+                            }))
+                        });
+                    }
+                }, 100); // Reduced frequency
+            }
+        }
+
+        function startGame() {
+            document.getElementById('setup').style.display = 'none';
+            resize();
+            initRack();
+            state.gameActive = true;
+            updatePlayerBadges();
+            updateTurnDisplay();
+            animate();
+
+            document.getElementById('chat-input').addEventListener('keypress', e => {
+                if (e.key === 'Enter' && e.target.value.trim() && state.conn) {
+                    state.conn.send({type: 'CHAT', msg: e.target.value.trim()});
+                    addChatMessage(e.target.value.trim(), true);
+                    e.target.value = '';
+                }
+            });
+        }
+
+        function startSolo() {
+            state.isSolo = true;
+            state.isMyTurn = true;
+            document.getElementById('setup').style.display = 'none';
+            resize();
+            initRack();
+            state.gameActive = true;
+            updatePlayerBadges();
+            updateTurnDisplay();
+            animate();
+        }
+
+        function endGame(win, reason) {
+            if (state.gameEnded) return;
+            state.gameEnded = true;
+            state.gameActive = false;
+            
+            clearInterval(state.syncInterval);
+            
+            const screen = document.getElementById('end-screen');
+            const title = document.getElementById('end-title');
+            const msg = document.getElementById('end-msg');
+            
+            screen.style.display = 'flex';
+            title.textContent = win ? '🎉 You Win!' : '😔 You Lose';
+            title.style.color = win ? '#238636' : '#da3633';
+            
+            const myBalls = state.balls.filter(b => b.type === state.myType && !b.potted).length;
+            const oppBalls = state.balls.filter(b => b.type !== state.myType && b.type !== 'cue' && b.type !== 'eight' && !b.potted).length;
+            
+            msg.innerHTML = `${reason || ''}<br>Your balls remaining: ${myBalls}<br>Opponent balls: ${oppBalls}`;
+            
+            if (state.conn && !win) {
+                state.conn.send({type: 'WIN'});
+            }
+        }
+
+        function addChatMessage(msg, isSelf) {
+            const div = document.createElement('div');
+            div.className = 'msg ' + (isSelf ? 'self' : 'other');
+            div.textContent = msg;
+            document.getElementById('chat-msgs').appendChild(div);
+            document.getElementById('chat-msgs').scrollTop = 999999;
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('error');
+            el.textContent = msg;
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 4000);
+        }
+
+        window.addEventListener('resize', resize);
+        window.addEventListener('load', initPeer);
+    </script>
 </body>
 </html>

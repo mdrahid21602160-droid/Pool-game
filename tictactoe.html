@@ -1,82 +1,914 @@
+<!-- tictactoe.html - FIXED VERSION -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Tic-Tac-Toe Pro</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        :root { --gold: #eec27e; --dark: #0d1117; --card: #161b22; --border: #30363d; }
-        body { background: var(--dark); color: white; font-family: sans-serif; margin:0; display: flex; flex-direction: column; align-items: center; height: 100vh; overflow: hidden; }
-        #board { display: grid; grid-template-columns: repeat(3, 100px); gap: 10px; margin-top: 20px;}
-        .sq { width: 100px; height: 100px; background: var(--card); border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 3rem; cursor: pointer; border-radius: 12px; }
-        #setup { position: fixed; inset: 0; background: rgba(13,17,23,0.98); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .code-display { font-family: 'Courier New', monospace; background: #000; color: var(--gold); padding: 15px 30px; border-radius: 8px; letter-spacing: 5px; font-size: 2.5rem; border: 2px solid var(--gold); margin: 20px 0; font-weight: bold; }
-        .btn { background: var(--gold); color: #3e2e14; padding: 15px 30px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        input { padding: 15px; text-align: center; border-radius: 8px; background: #111; color: white; border: 1px solid var(--border); width: 200px; margin-bottom:10px; }
-        #chat-container { position: fixed; bottom: 10px; right: 10px; width: 250px; height: 300px; background: var(--card); border: 1px solid var(--border); display: flex; flex-direction: column; border-radius: 8px; z-index: 90; }
-        #chat-msgs { flex-grow: 1; overflow-y: scroll; padding: 10px; font-size: 12px; }
-        #chat-input { border: none; padding: 10px; background: var(--dark); color: white; border-top: 1px solid var(--border); }
-        .spinner { display: inline-block; width: 30px; height: 30px; border: 4px solid rgba(238, 194, 126, 0.3); border-radius: 50%; border-top-color: var(--gold); animation: spin 1s ease-in-out infinite; }
+        :root {
+            --gold: #eec27e;
+            --dark: #0d1117;
+            --card: #161b22;
+            --border: #30363d;
+            --win: #238636;
+            --lose: #da3633;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            background: var(--dark);
+            color: #c9d1d9;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        #setup {
+            position: fixed;
+            inset: 0;
+            background: rgba(13, 17, 23, 0.98);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .setup-content {
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            color: var(--gold);
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .subtitle { color: #8b949e; margin-bottom: 30px; }
+
+        .code-display {
+            font-family: 'SF Mono', Monaco, monospace;
+            background: #000;
+            color: var(--gold);
+            padding: 20px 40px;
+            border-radius: 12px;
+            letter-spacing: 8px;
+            font-size: 2.2rem;
+            border: 2px solid var(--gold);
+            margin: 20px 0;
+            font-weight: bold;
+            position: relative;
+            user-select: all;
+        }
+
+        .copy-btn {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: transparent;
+            border: 1px solid var(--gold);
+            color: var(--gold);
+            padding: 5px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .code-display:hover .copy-btn { opacity: 1; }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin: 20px 0;
+        }
+
+        input {
+            padding: 15px;
+            text-align: center;
+            border-radius: 10px;
+            background: #111;
+            color: white;
+            border: 1px solid var(--border);
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+            transition: border-color 0.2s;
+        }
+
+        input:focus { outline: none; border-color: var(--gold); }
+
+        .btn {
+            background: var(--gold);
+            color: #3e2e14;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.2s;
+            width: 100%;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(238, 194, 126, 0.3);
+        }
+
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .btn-secondary {
+            background: transparent;
+            color: #8b949e;
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            border-color: var(--gold);
+            color: var(--gold);
+            box-shadow: none;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(238, 194, 126, 0.2);
+            border-radius: 50%;
+            border-top-color: var(--gold);
+            animation: spin 1s linear infinite;
+        }
+
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        .status-bar {
+            width: 100%;
+            padding: 20px;
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #turn {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--gold);
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: #8b949e;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--win);
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.disconnected {
+            background: var(--lose);
+            animation: none;
+        }
+
+        #board {
+            display: grid;
+            grid-template-columns: repeat(3, 120px);
+            gap: 12px;
+            margin-top: 40px;
+            padding: 20px;
+            background: var(--card);
+            border-radius: 20px;
+            border: 1px solid var(--border);
+        }
+
+        .sq {
+            width: 120px;
+            height: 120px;
+            background: var(--dark);
+            border: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3.5rem;
+            cursor: pointer;
+            border-radius: 16px;
+            transition: all 0.2s;
+            font-weight: bold;
+        }
+
+        .sq:hover:not(.taken) {
+            border-color: var(--gold);
+            background: rgba(238, 194, 126, 0.05);
+        }
+
+        .sq.taken { cursor: default; }
+
+        .sq.x {
+            color: #58a6ff;
+            text-shadow: 0 0 20px rgba(88, 166, 255, 0.4);
+        }
+
+        .sq.o {
+            color: var(--gold);
+            text-shadow: 0 0 20px rgba(238, 194, 126, 0.4);
+        }
+
+        .sq.win {
+            background: rgba(35, 134, 54, 0.2);
+            border-color: var(--win);
+            animation: winPulse 0.5s ease;
+        }
+
+        @keyframes winPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .controls {
+            margin-top: 30px;
+            display: flex;
+            gap: 15px;
+        }
+
+        #chat-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 300px;
+            height: 350px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            display: none;
+            flex-direction: column;
+            border-radius: 12px;
+            overflow: hidden;
+            z-index: 90;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        #chat-header {
+            padding: 12px 15px;
+            background: rgba(238, 194, 126, 0.1);
+            border-bottom: 1px solid var(--border);
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--gold);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #chat-msgs {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 15px;
+            font-size: 0.9rem;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .msg {
+            padding: 8px 12px;
+            border-radius: 12px;
+            max-width: 85%;
+            word-break: break-word;
+        }
+
+        .msg.self {
+            background: rgba(88, 166, 255, 0.15);
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+
+        .msg.other {
+            background: rgba(238, 194, 126, 0.15);
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+
+        .msg-system {
+            text-align: center;
+            color: #8b949e;
+            font-size: 0.8rem;
+            font-style: italic;
+        }
+
+        #chat-input {
+            border: none;
+            padding: 15px;
+            background: var(--dark);
+            color: white;
+            border-top: 1px solid var(--border);
+            font-size: 0.95rem;
+        }
+
+        #chat-input:focus { outline: none; background: #0d1117; }
+
+        .error-toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            background: var(--lose);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-weight: 600;
+            z-index: 200;
+            transition: transform 0.3s;
+            box-shadow: 0 5px 20px rgba(218, 54, 51, 0.3);
+        }
+
+        .error-toast.show { transform: translateX(-50%) translateY(0); }
+
+        @media (max-width: 600px) {
+            #board { grid-template-columns: repeat(3, 90px); gap: 8px; }
+            .sq { width: 90px; height: 90px; font-size: 2.5rem; }
+            #chat-container { width: calc(100% - 40px); height: 250px; }
+        }
     </style>
 </head>
 <body>
     <div id="setup">
-        <h1 style="color:var(--gold)">TIC-TAC-TOE</h1>
-        <div id="my-id"><span class="spinner"></span></div>
-        <input type="number" id="join-id" placeholder="Friend's Code">
-        <button class="btn" onclick="connect()">JOIN</button>
+        <div class="setup-content">
+            <h1>Tic-Tac-Toe</h1>
+            <p class="subtitle">Share your code or enter a friend's code to play</p>
+            
+            <div id="my-id"><span class="spinner"></span></div>
+            
+            <div class="input-group">
+                <input type="text" id="join-id" placeholder="Enter 4-digit code" maxlength="4" autocomplete="off">
+                <button class="btn" id="join-btn" onclick="connect()" disabled>Join Game</button>
+                <button class="btn btn-secondary" onclick="startSolo()">Practice Solo</button>
+            </div>
+            
+            <p style="margin-top: 20px; font-size: 0.85rem; color: #6e7681;">
+                Connection encrypted • No data stored
+            </p>
+        </div>
     </div>
-    <div id="turn" style="font-size: 1.5rem; color: var(--gold); margin-top: 20px; font-weight:bold;">WAITING...</div>
+
+    <div class="error-toast" id="error-toast"></div>
+
+    <div class="status-bar">
+        <div id="turn">Waiting for opponent...</div>
+        <div class="connection-status">
+            <span class="status-dot" id="conn-dot"></span>
+            <span id="conn-text">Connecting...</span>
+        </div>
+    </div>
+
     <div id="board"></div>
-    <button id="res" onclick="location.reload()" style="display:none; margin-top:20px; background:var(--gold); padding:10px; border-radius:5px; border:none; font-weight:bold; cursor:pointer;">NEW GAME</button>
-    <div id="chat-container">
-        <div id="chat-msgs"></div>
-        <input type="text" id="chat-input" placeholder="Type message...">
+
+    <div class="controls">
+        <button class="btn btn-secondary" onclick="offerRematch()" id="rematch-btn" style="display:none;">Offer Rematch</button>
+        <button class="btn btn-secondary" onclick="location.reload()">New Game</button>
     </div>
-<script>
-    const boardEl = document.getElementById('board'), chatMsgs = document.getElementById('chat-msgs'), chatInput = document.getElementById('chat-input');
-    let state = Array(9).fill(''), isMyTurn = false, myChar = 'X', conn = null;
-    const peer = new Peer(Math.floor(1000 + Math.random()*9000).toString());
-    peer.on('open', id => document.getElementById('my-id').innerHTML = `<div class="code-display">${id}</div>`);
-    peer.on('connection', c => { conn = c; isMyTurn = true; myChar = 'X'; setupConn(); start(); });
-    function connect() { const tid = document.getElementById('join-id').value; conn = peer.connect(tid); myChar = 'O'; isMyTurn = false; setupConn(); start(); }
-    function setupConn() {
-        conn.on('open', () => {
-            conn.on('data', d => {
-                if(d.type === 'CHAT') addMessage('Friend', d.msg);
-                else { state = d.state; isMyTurn = true; render(); }
+
+    <div id="chat-container">
+        <div id="chat-header">
+            <span>💬 Chat</span>
+            <span style="font-size: 0.8rem; color: #8b949e;" id="typing-indicator"></span>
+        </div>
+        <div id="chat-msgs"></div>
+        <input type="text" id="chat-input" placeholder="Type a message..." maxlength="100">
+    </div>
+
+    <script>
+        // FIXED: Comprehensive game state with validation
+        const state = {
+            board: Array(9).fill(null),
+            isMyTurn: false,
+            myChar: 'X',
+            opponentChar: 'O',
+            currentPlayer: 'X', // FIXED: Track whose turn it is by symbol, not boolean
+            conn: null,
+            peer: null,
+            myId: null,
+            gameActive: false,
+            winner: null,
+            moveHistory: [],
+            isSolo: false,
+            moveCount: 0, // FIXED: Track moves for solo mode
+            rematchOffered: false,
+            lastMoveTime: 0, // FIXED: Debouncing
+            processingMove: false // FIXED: Prevent double-clicks
+        };
+
+        const ui = {
+            board: document.getElementById('board'),
+            turn: document.getElementById('turn'),
+            setup: document.getElementById('setup'),
+            myId: document.getElementById('my-id'),
+            joinBtn: document.getElementById('join-btn'),
+            joinInput: document.getElementById('join-id'),
+            chatMsgs: document.getElementById('chat-msgs'),
+            chatInput: document.getElementById('chat-input'),
+            connDot: document.getElementById('conn-dot'),
+            connText: document.getElementById('conn-text'),
+            rematchBtn: document.getElementById('rematch-btn'),
+            errorToast: document.getElementById('error-toast'),
+            chatContainer: document.getElementById('chat-container')
+        };
+
+        // FIXED: Initialize PeerJS with comprehensive error handling
+        function initPeer() {
+            const randomId = Math.floor(1000 + Math.random() * 9000).toString();
+            state.peer = new Peer(randomId, {
+                debug: 1,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                }
             });
-            // --- GRACEFUL DISCONNECT ---
-            conn.on('close', () => { alert("Friend disconnected!"); location.reload(); });
-        });
-    }
-    function start() { document.getElementById('setup').style.display='none'; render(); }
-    chatInput.addEventListener('keypress', (e) => {
-        if(e.key === 'Enter' && conn) {
-            const msg = chatInput.value;
-            if(msg.trim() === "") return;
-            conn.send({type: 'CHAT', msg: msg});
-            addMessage('You', msg);
-            chatInput.value = '';
+
+            const timeout = setTimeout(() => {
+                showError('Connection timeout. Please reload.');
+            }, 15000);
+
+            state.peer.on('open', id => {
+                clearTimeout(timeout);
+                state.myId = id;
+                ui.myId.innerHTML = `
+                    <div class="code-display">
+                        ${id}
+                        <button class="copy-btn" onclick="copyCode()">Copy</button>
+                    </div>
+                    <p style="margin-top: 10px; color: #8b949e; font-size: 0.9rem;">Share this code with your friend</p>
+                `;
+                ui.joinBtn.disabled = false;
+                updateConnectionStatus('ready', 'Ready to connect');
+            });
+
+            state.peer.on('connection', c => {
+                // FIXED: Prevent multiple connections
+                if (state.conn) {
+                    c.close();
+                    return;
+                }
+                state.isSolo = false;
+                state.conn = c;
+                state.isMyTurn = true;
+                state.myChar = 'X';
+                state.opponentChar = 'O';
+                state.currentPlayer = 'X';
+                setupConnection();
+                startGame();
+            });
+
+            state.peer.on('error', err => {
+                clearTimeout(timeout);
+                let msg = 'Connection error';
+                if (err.type === 'unavailable-id') {
+                    msg = 'ID taken, reloading...';
+                    setTimeout(() => location.reload(), 2000);
+                } else if (err.type === 'peer-unavailable') {
+                    msg = 'Friend not found. Check the code.';
+                } else if (err.type === 'network') {
+                    msg = 'Network error. Check connection.';
+                } else if (err.type === 'invalid-id') {
+                    msg = 'Invalid ID format';
+                } else if (err.type === 'disconnected') {
+                    msg = 'Disconnected from server';
+                }
+                showError(msg);
+            });
+
+            state.peer.on('disconnected', () => {
+                updateConnectionStatus('disconnected', 'Disconnected - reconnecting...');
+                state.peer.reconnect();
+            });
         }
-    });
-    function addMessage(user, msg) { chatMsgs.innerHTML += `<div><strong>${user}:</strong> ${msg}</div>`; chatMsgs.scrollTop = chatMsgs.scrollHeight; }
-    function checkWin() {
-        const w = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-        for(let l of w) if(state[l[0]] && state[l[0]]===state[l[1]] && state[l[0]]===state[l[2]]) return state[l[0]];
-        return state.includes('') ? null : 'draw';
-    }
-    function render() {
-        boardEl.innerHTML = ''; const win = checkWin();
-        document.getElementById('turn').innerText = win ? (win==='draw'?"DRAW!":win+" WINS!") : (isMyTurn ? "★ YOUR TURN ★" : "OPPONENT'S TURN");
-        if(win) document.getElementById('res').style.display='block';
-        state.forEach((v, i) => {
-            const s = document.createElement('div'); s.className = 'sq'; s.innerText = v;
-            s.onclick = () => { if(!isMyTurn || state[i] || win) return; state[i] = myChar; isMyTurn = false; if(conn) conn.send({state}); render(); };
-            boardEl.appendChild(s);
+
+        function copyCode() {
+            if (state.myId) {
+                navigator.clipboard.writeText(state.myId).then(() => {
+                    const btn = document.querySelector('.copy-btn');
+                    btn.textContent = 'Copied!';
+                    setTimeout(() => btn.textContent = 'Copy', 2000);
+                });
+            }
+        }
+
+        function connect() {
+            const friendId = ui.joinInput.value.trim();
+            if (!friendId || friendId.length !== 4 || friendId === state.myId) {
+                showError('Enter a valid 4-digit code different from yours');
+                return;
+            }
+
+            ui.joinBtn.disabled = true;
+            ui.joinBtn.innerHTML = '<span class="spinner" style="width: 20px; height: 20px; border-width: 2px; vertical-align: middle; margin-right: 8px;"></span> Connecting...';
+
+            state.isSolo = false;
+            state.conn = state.peer.connect(friendId, { reliable: true });
+            state.myChar = 'O';
+            state.opponentChar = 'X';
+            state.currentPlayer = 'X'; // X always starts
+            state.isMyTurn = false;
+
+            state.conn.on('open', () => {
+                setupConnection();
+                startGame();
+            });
+
+            state.conn.on('error', () => {
+                showError('Failed to connect. Try again.');
+                ui.joinBtn.disabled = false;
+                ui.joinBtn.textContent = 'Join Game';
+            });
+
+            // FIXED: Connection timeout
+            setTimeout(() => {
+                if (!state.gameActive) {
+                    showError('Connection failed. Please check the code and try again.');
+                    ui.joinBtn.disabled = false;
+                    ui.joinBtn.textContent = 'Join Game';
+                }
+            }, 10000);
+        }
+
+        function setupConnection() {
+            updateConnectionStatus('connected', 'Connected');
+
+            state.conn.on('data', data => {
+                if (!data || !data.type) return;
+                
+                switch(data.type) {
+                    case 'MOVE':
+                        // FIXED: Validate move before applying
+                        if (state.gameActive && !state.isMyTurn && data.index >= 0 && data.index < 9 && 
+                            !state.board[data.index] && data.symbol === state.opponentChar) {
+                            handleRemoteMove(data.index, data.symbol);
+                        }
+                        break;
+                    case 'CHAT':
+                        addChatMessage(data.msg, false);
+                        break;
+                    case 'TYPING':
+                        showTypingIndicator();
+                        break;
+                    case 'REMATCH_OFFER':
+                        handleRematchOffer();
+                        break;
+                    case 'REMATCH_ACCEPT':
+                        // FIXED: Reset rematch state
+                        state.rematchOffered = false;
+                        resetGame();
+                        break;
+                    case 'REMATCH_DECLINE':
+                        state.rematchOffered = false;
+                        ui.rematchBtn.disabled = false;
+                        ui.rematchBtn.textContent = 'Offer Rematch';
+                        addSystemMessage('Rematch declined');
+                        break;
+                }
+            });
+
+            state.conn.on('close', () => {
+                updateConnectionStatus('disconnected', 'Opponent disconnected');
+                state.gameActive = false;
+                ui.turn.textContent = 'Opponent left the game';
+                showError('Your opponent has disconnected');
+            });
+
+            state.conn.on('error', () => {
+                updateConnectionStatus('error', 'Connection error');
+            });
+        }
+
+        function startGame() {
+            state.gameActive = true;
+            ui.setup.style.display = 'none';
+            // FIXED: Show chat only in multiplayer
+            if (!state.isSolo) {
+                ui.chatContainer.style.display = 'flex';
+            }
+            renderBoard();
+            updateTurnDisplay();
+            
+            addSystemMessage(state.isSolo ? 'Practice mode started. You play both X and O.' : 
+                `Game started! You are ${state.myChar}. ${state.isMyTurn ? 'Your move first!' : 'Waiting for opponent...'}`);
+        }
+
+        function startSolo() {
+            state.isSolo = true;
+            state.isMyTurn = true;
+            state.myChar = 'X';
+            state.opponentChar = 'O';
+            state.currentPlayer = 'X';
+            state.moveCount = 0;
+            startGame();
+        }
+
+        function renderBoard() {
+            ui.board.innerHTML = '';
+            state.board.forEach((cell, index) => {
+                const sq = document.createElement('div');
+                sq.className = `sq ${cell ? 'taken ' + cell.toLowerCase() : ''}`;
+                sq.textContent = cell || '';
+                
+                if (state.winner && state.winner.line && state.winner.line.includes(index)) {
+                    sq.classList.add('win');
+                }
+                
+                sq.onclick = () => handleClick(index);
+                ui.board.appendChild(sq);
+            });
+        }
+
+        // FIXED: Debounced click handler with comprehensive validation
+        function handleClick(index) {
+            // Debounce: prevent clicks within 300ms of last move
+            const now = Date.now();
+            if (now - state.lastMoveTime < 300) return;
+            
+            // Prevent processing if already processing
+            if (state.processingMove) return;
+            
+            if (!state.gameActive || state.board[index]) return;
+            
+            // In solo mode, allow moves based on current player symbol
+            // In multiplayer, only allow if it's my turn
+            if (!state.isSolo && !state.isMyTurn) {
+                showError("It's not your turn!");
+                return;
+            }
+
+            state.processingMove = true;
+            state.lastMoveTime = now;
+
+            // Determine which symbol to place
+            const symbol = state.isSolo ? state.currentPlayer : state.myChar;
+            
+            // Make move
+            state.board[index] = symbol;
+            state.moveCount++;
+            
+            // Sync if multiplayer
+            if (!state.isSolo && state.conn && state.conn.open) {
+                state.conn.send({ 
+                    type: 'MOVE', 
+                    index: index, 
+                    symbol: symbol,
+                    board: state.board // Send full state for validation
+                });
+            }
+
+            // Check win
+            const win = checkWin(state.board);
+            if (win) {
+                state.winner = win;
+                state.gameActive = false;
+                const iWon = win.player === state.myChar;
+                endGame(iWon ? 'win' : 'lose', win.player);
+            } else if (state.board.every(c => c !== null)) {
+                state.gameActive = false;
+                endGame('draw', null);
+            } else {
+                // Switch turns
+                if (state.isSolo) {
+                    state.currentPlayer = state.currentPlayer === 'X' ? 'O' : 'X';
+                    // In solo, we always "isMyTurn" but track via currentPlayer
+                } else {
+                    state.isMyTurn = false;
+                }
+            }
+
+            renderBoard();
+            updateTurnDisplay();
+            
+            state.processingMove = false;
+        }
+
+        // FIXED: Validated remote move handler
+        function handleRemoteMove(index, symbol) {
+            // Validate symbol matches expected opponent
+            if (symbol !== state.opponentChar) {
+                console.error('Invalid symbol from opponent');
+                return;
+            }
+            
+            // Validate position is empty
+            if (state.board[index]) {
+                console.error('Position already occupied');
+                return;
+            }
+            
+            state.board[index] = symbol;
+            state.moveCount++;
+            
+            const win = checkWin(state.board);
+            if (win) {
+                state.winner = win;
+                state.gameActive = false;
+                endGame(win.player === state.myChar ? 'win' : 'lose', win.player);
+            } else if (state.board.every(c => c !== null)) {
+                state.gameActive = false;
+                endGame('draw', null);
+            } else {
+                state.isMyTurn = true;
+            }
+            
+            renderBoard();
+            updateTurnDisplay();
+        }
+
+        function checkWin(board) {
+            const lines = [
+                [0,1,2], [3,4,5], [6,7,8],
+                [0,3,6], [1,4,7], [2,5,8],
+                [0,4,8], [2,4,6]
+            ];
+            
+            for (const line of lines) {
+                const [a, b, c] = line;
+                if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+                    return { player: board[a], line: line };
+                }
+            }
+            return null;
+        }
+
+        function updateTurnDisplay() {
+            if (!state.gameActive) return;
+            
+            if (state.isSolo) {
+                ui.turn.textContent = `${state.currentPlayer}'s Turn (${state.currentPlayer === 'X' ? 'Blue' : 'Gold'})`;
+                ui.turn.style.color = state.currentPlayer === 'X' ? '#58a6ff' : '#eec27e';
+            } else {
+                ui.turn.textContent = state.isMyTurn ? '★ Your Turn ★' : "Opponent's Turn";
+                ui.turn.style.color = state.isMyTurn ? '#58a6ff' : '#eec27e';
+            }
+        }
+
+        function endGame(result, winnerSymbol) {
+            const messages = {
+                'win': '🎉 You Win!',
+                'lose': '😔 You Lose',
+                'draw': '🤝 Draw!'
+            };
+            
+            let displayText;
+            if (result === 'draw') {
+                displayText = messages.draw;
+                ui.turn.style.color = '#8b949e';
+            } else {
+                const iWon = (state.isSolo && winnerSymbol === 'X') || (!state.isSolo && winnerSymbol === state.myChar);
+                displayText = iWon ? messages.win : messages.lose;
+                ui.turn.style.color = iWon ? '#238636' : '#da3633';
+            }
+            
+            ui.turn.textContent = displayText;
+            
+            if (!state.isSolo) {
+                ui.rematchBtn.style.display = 'inline-block';
+                ui.rematchBtn.disabled = false;
+                ui.rematchBtn.textContent = 'Offer Rematch';
+            }
+            
+            addSystemMessage(`Game ended: ${displayText}`);
+        }
+
+        // FIXED: Proper rematch handling with timeout
+        function offerRematch() {
+            if (!state.conn || !state.conn.open || state.rematchOffered) return;
+            
+            state.rematchOffered = true;
+            state.conn.send({ type: 'REMATCH_OFFER' });
+            ui.rematchBtn.textContent = 'Rematch offered...';
+            ui.rematchBtn.disabled = true;
+            
+            // FIXED: 10 second timeout for rematch response
+            setTimeout(() => {
+                if (state.rematchOffered) {
+                    state.rematchOffered = false;
+                    ui.rematchBtn.disabled = false;
+                    ui.rematchBtn.textContent = 'Offer Rematch';
+                    addSystemMessage('Rematch offer expired');
+                }
+            }, 10000);
+        }
+
+        function handleRematchOffer() {
+            if (confirm('Opponent wants a rematch. Accept?')) {
+                state.conn.send({ type: 'REMATCH_ACCEPT' });
+                resetGame();
+            } else {
+                state.conn.send({ type: 'REMATCH_DECLINE' });
+            }
+        }
+
+        function resetGame() {
+            state.board.fill(null);
+            state.isMyTurn = state.myChar === 'X';
+            state.currentPlayer = 'X';
+            state.gameActive = true;
+            state.winner = null;
+            state.moveCount = 0;
+            state.rematchOffered = false;
+            state.processingMove = false;
+            state.lastMoveTime = 0;
+            
+            ui.rematchBtn.style.display = 'none';
+            ui.rematchBtn.disabled = false;
+            ui.rematchBtn.textContent = 'Offer Rematch';
+            
+            renderBoard();
+            updateTurnDisplay();
+            addSystemMessage('New game started!');
+        }
+
+        // Chat System
+        ui.chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && e.target.value.trim()) {
+                const msg = e.target.value.trim();
+                if (msg.length > 100) {
+                    showError('Message too long (max 100 chars)');
+                    return;
+                }
+                addChatMessage(msg, true);
+                if (state.conn && state.conn.open) {
+                    state.conn.send({ type: 'CHAT', msg: msg });
+                }
+                e.target.value = '';
+            }
         });
-    }
-</script>
+
+        let typingTimeout;
+        ui.chatInput.addEventListener('input', () => {
+            if (state.conn && state.conn.open) {
+                state.conn.send({ type: 'TYPING' });
+            }
+        });
+
+        function showTypingIndicator() {
+            const indicator = document.getElementById('typing-indicator');
+            indicator.textContent = 'typing...';
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => {
+                indicator.textContent = '';
+            }, 1000);
+        }
+
+        function addChatMessage(msg, isSelf) {
+            const div = document.createElement('div');
+            div.className = 'msg ' + (isSelf ? 'self' : 'other');
+            div.textContent = msg;
+            ui.chatMsgs.appendChild(div);
+            ui.chatMsgs.scrollTop = ui.chatMsgs.scrollHeight;
+        }
+
+        function addSystemMessage(msg) {
+            const div = document.createElement('div');
+            div.className = 'msg-system';
+            div.textContent = msg;
+            ui.chatMsgs.appendChild(div);
+            ui.chatMsgs.scrollTop = ui.chatMsgs.scrollHeight;
+        }
+
+        function updateConnectionStatus(status, text) {
+            ui.connText.textContent = text;
+            ui.connDot.className = 'status-dot' + (status === 'disconnected' || status === 'error' ? ' disconnected' : '');
+        }
+
+        function showError(msg) {
+            ui.errorToast.textContent = msg;
+            ui.errorToast.classList.add('show');
+            setTimeout(() => ui.errorToast.classList.remove('show'), 4000);
+        }
+
+        // Keyboard shortcut: Escape to reload
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !state.gameActive) {
+                location.reload();
+            }
+        });
+
+        window.addEventListener('load', initPeer);
+    </script>
 </body>
 </html>

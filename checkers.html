@@ -1,102 +1,957 @@
+<!-- checkers.html - FIXED VERSION -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>P2P Checkers Pro</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        :root { --sq: min(12vw, 55px); --gold: #eec27e; --dark: #0d1117; --card: #161b22; --border: #30363d; }
-        body { background: var(--dark); color: white; font-family: sans-serif; margin:0; display: flex; flex-direction: column; align-items: center; }
-        #board { display: grid; grid-template-columns: repeat(8, var(--sq)); border: 6px solid #333; margin-top: 15px; }
-        .sq { width: var(--sq); height: var(--sq); display: flex; align-items: center; justify-content: center; cursor: pointer; }
-        .l { background: #f0d9b5; } .d { background: #b58863; }
-        .sel { background: #bbcb2b !important; }
-        .piece { width: 80%; height: 80%; border-radius: 50%; border: 2px solid #000; }
-        .p-w { background: #fff; } .p-b { background: #d33; }
-        .king { border: 4px solid #ffd700 !important; }
-        #setup { position: fixed; inset: 0; background: rgba(13,17,23,0.98); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .code-display { font-family: 'Courier New', monospace; background: #000; color: var(--gold); padding: 15px 30px; border-radius: 8px; letter-spacing: 5px; font-size: 2.5rem; border: 2px solid var(--gold); margin: 20px 0; font-weight: bold; }
-        .btn { background: var(--gold); color: #3e2e14; padding: 15px 30px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        input { padding: 15px; text-align: center; border-radius: 8px; background: #111; color: white; border: 1px solid var(--border); width: 200px; margin-bottom:10px; }
-        #chat-container { position: fixed; bottom: 10px; right: 10px; width: 250px; height: 300px; background: var(--card); border: 1px solid var(--border); display: flex; flex-direction: column; border-radius: 8px; z-index: 90; }
-        #chat-msgs { flex-grow: 1; overflow-y: scroll; padding: 10px; font-size: 12px; }
-        #chat-input { border: none; padding: 10px; background: var(--dark); color: white; border-top: 1px solid var(--border); }
-        .spinner { display: inline-block; width: 30px; height: 30px; border: 4px solid rgba(238, 194, 126, 0.3); border-radius: 50%; border-top-color: var(--gold); animation: spin 1s ease-in-out infinite; }
+        :root {
+            --gold: #eec27e;
+            --dark: #0d1117;
+            --card: #161b22;
+            --border: #30363d;
+            --light-sq: #f0d9b5;
+            --dark-sq: #b58863;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            background: var(--dark);
+            color: #c9d1d9;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #setup {
+            position: fixed;
+            inset: 0;
+            background: rgba(13, 17, 23, 0.98);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .setup-content {
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            color: var(--gold);
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .subtitle { color: #8b949e; margin-bottom: 30px; }
+
+        .code-display {
+            font-family: 'SF Mono', monospace;
+            background: #000;
+            color: var(--gold);
+            padding: 20px 40px;
+            border-radius: 12px;
+            letter-spacing: 8px;
+            font-size: 2.2rem;
+            border: 2px solid var(--gold);
+            margin: 20px 0;
+            font-weight: bold;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin: 20px 0;
+        }
+
+        input {
+            padding: 15px;
+            text-align: center;
+            border-radius: 10px;
+            background: #111;
+            color: white;
+            border: 1px solid var(--border);
+            font-size: 1.2rem;
+        }
+
+        input:focus { outline: none; border-color: var(--gold); }
+
+        .btn {
+            background: var(--gold);
+            color: #3e2e14;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(238, 194, 126, 0.3);
+        }
+
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .btn-secondary {
+            background: transparent;
+            color: #8b949e;
+            border: 1px solid var(--border);
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(238, 194, 126, 0.2);
+            border-radius: 50%;
+            border-top-color: var(--gold);
+            animation: spin 1s linear infinite;
+        }
+
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        #game-ui {
+            width: 100%;
+            padding: 15px 20px;
+            background: var(--card);
+            border-bottom: 2px solid var(--gold);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #turn {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--gold);
+        }
+
+        .capture-count {
+            font-size: 0.9rem;
+            color: #8b949e;
+        }
+
+        #board-container {
+            margin: 20px auto;
+            position: relative;
+        }
+
+        #board {
+            display: grid;
+            grid-template-columns: repeat(8, min(11vw, 55px));
+            grid-template-rows: repeat(8, min(11vw, 55px));
+            border: 4px solid #5d4037;
+            border-radius: 4px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .sq {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .sq.light { background: var(--light-sq); }
+        .sq.dark { background: var(--dark-sq); }
+
+        .sq.selected {
+            background: #bbcb2b !important;
+        }
+
+        .sq.valid-jump::after {
+            content: '';
+            position: absolute;
+            width: 40%;
+            height: 40%;
+            background: rgba(0,0,0,0.2);
+            border-radius: 50%;
+        }
+
+        .sq.valid-move {
+            box-shadow: inset 0 0 0 4px rgba(187, 203, 43, 0.5);
+        }
+
+        .piece {
+            width: 80%;
+            height: 80%;
+            border-radius: 50%;
+            border: 2px solid rgba(0,0,0,0.3);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            transition: transform 0.2s;
+            position: relative;
+        }
+
+        .piece.white {
+            background: radial-gradient(circle at 30% 30%, #ffffff, #e0e0e0);
+        }
+
+        .piece.black {
+            background: radial-gradient(circle at 30% 30%, #555555, #222222);
+        }
+
+        .piece.king::after {
+            content: '👑';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.2rem;
+        }
+
+        .piece-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        #end-screen {
+            position: fixed;
+            inset: 0;
+            background: rgba(13, 17, 23, 0.95);
+            z-index: 100;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #end-screen h1 {
+            font-size: 3rem;
+            color: var(--gold);
+            margin-bottom: 20px;
+        }
+
+        .score-board {
+            display: flex;
+            gap: 40px;
+            margin-bottom: 30px;
+            font-size: 1.2rem;
+        }
+
+        .score-item {
+            text-align: center;
+        }
+
+        .score-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: white;
+        }
+
+        #chat-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 280px;
+            height: 280px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            display: none;
+            flex-direction: column;
+            z-index: 90;
+        }
+
+        #chat-header {
+            padding: 12px;
+            background: rgba(238, 194, 126, 0.1);
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+            color: var(--gold);
+        }
+
+        #chat-msgs {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 10px;
+            font-size: 0.85rem;
+        }
+
+        #chat-input {
+            border: none;
+            padding: 12px;
+            background: var(--dark);
+            color: white;
+            border-top: 1px solid var(--border);
+            border-radius: 0 0 12px 12px;
+        }
+
+        .msg {
+            margin: 5px 0;
+            padding: 6px 10px;
+            border-radius: 8px;
+            max-width: 85%;
+        }
+
+        .msg.self { background: rgba(88, 166, 255, 0.15); margin-left: auto; }
+        .msg.other { background: rgba(238, 194, 126, 0.15); }
+
+        .error-toast {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #da3633;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            z-index: 200;
+            display: none;
+        }
+
+        .must-jump-indicator {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #f85149;
+            color: white;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            display: none;
+            z-index: 50;
+        }
+
+        @media (max-width: 600px) {
+            #chat-container { width: calc(100% - 40px); height: 200px; }
+        }
     </style>
 </head>
 <body>
     <div id="setup">
-        <h1 style="color:var(--gold)">CHECKERS</h1>
-        <div id="my-id"><span class="spinner"></span></div>
-        <input type="number" id="join-id" placeholder="Friend's Code">
-        <button class="btn" onclick="connect()">JOIN</button>
+        <div class="setup-content">
+            <h1>🏁 Checkers</h1>
+            <p class="subtitle">International rules. Forced captures. Multi-jumps.</p>
+            
+            <div id="my-id"><span class="spinner"></span></div>
+            
+            <div class="input-group">
+                <input type="text" id="join-id" placeholder="Enter 4-digit code" maxlength="4">
+                <button class="btn" id="join-btn" onclick="connect()" disabled>Join Game</button>
+                <button class="btn btn-secondary" onclick="startSolo()">Practice Solo</button>
+            </div>
+        </div>
     </div>
-    <div id="turn" style="background:var(--card); width:100%; padding:15px; text-align:center; color:var(--gold); font-weight:bold; border-bottom:2px solid var(--gold);">WAITING...</div>
-    <div id="board"></div>
+
+    <div class="error-toast" id="error"></div>
+    <div class="must-jump-indicator" id="must-jump">⚠️ You must jump!</div>
+
+    <div id="end-screen">
+        <h1 id="end-title">Game Over</h1>
+        <div class="score-board">
+            <div class="score-item">
+                <div>White</div>
+                <div class="score-value" id="white-score">12</div>
+            </div>
+            <div class="score-item">
+                <div>Black</div>
+                <div class="score-value" id="black-score">12</div>
+            </div>
+        </div>
+        <button class="btn" onclick="location.reload()">Play Again</button>
+    </div>
+
+    <div id="game-ui">
+        <div class="capture-count" id="captures">White: 0 | Black: 0</div>
+        <div id="turn">Waiting...</div>
+        <div style="font-size: 0.85rem; color: #8b949e;" id="player-info">You play White</div>
+    </div>
+
+    <div id="board-container">
+        <div id="board"></div>
+    </div>
+
     <div id="chat-container">
+        <div id="chat-header">Chat</div>
         <div id="chat-msgs"></div>
         <input type="text" id="chat-input" placeholder="Type message...">
     </div>
-<script>
-    const boardEl = document.getElementById('board'), chatMsgs = document.getElementById('chat-msgs'), chatInput = document.getElementById('chat-input');
-    let game = [['','b','','b','','b','','b'],['b','','b','','b','','b',''],['','b','','b','','b','','b'],['','','','','','','',''],['','','','','','','',''],['w','','w','','w','','w',''],['','w','','w','','w','','w'],['w','','w','','w','','w','']];
-    let isMyTurn = true, myCol = 'w', conn = null, sel = null;
-    const peer = new Peer(Math.floor(1000 + Math.random()*9000).toString());
-    peer.on('open', id => document.getElementById('my-id').innerHTML = `<div class="code-display">${id}</div>`);
-    peer.on('connection', c => { conn = c; isMyTurn = true; myCol = 'w'; setupConn(); start(); });
-    function connect() { const tid = document.getElementById('join-id').value; conn = peer.connect(tid); myCol = 'b'; isMyTurn = false; setupConn(); start(); }
-    function setupConn() {
-        conn.on('open', () => {
-            conn.on('data', d => {
-                if(d.type === 'CHAT') addMessage('Friend', d.msg);
-                else { game = d.game; isMyTurn = true; render(); }
+
+    <script>
+        // FIXED: Comprehensive game state
+        const state = {
+            board: [],
+            isMyTurn: false,
+            myColor: 'w',
+            isHost: false,
+            isSolo: false,
+            conn: null,
+            peer: null,
+            myId: null,
+            gameActive: false,
+            selected: null,
+            captures: { w: 0, b: 0 },
+            mustJump: false,
+            multiJump: false,
+            lastJumpDest: null,
+            currentPlayer: 'w', // Track by symbol, not boolean
+            lastMoveTime: 0,
+            processingMove: false
+        };
+
+        function initBoard() {
+            state.board = [];
+            for (let r = 0; r < 8; r++) {
+                const row = [];
+                for (let c = 0; c < 8; c++) {
+                    if ((r + c) % 2 === 1) {
+                        if (r < 3) row.push('b');
+                        else if (r > 4) row.push('w');
+                        else row.push(null);
+                    } else {
+                        row.push(null);
+                    }
+                }
+                state.board.push(row);
+            }
+        }
+
+        function initPeer() {
+            const randomId = Math.floor(1000 + Math.random() * 9000).toString();
+            state.peer = new Peer(randomId, {
+                debug: 1,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                }
             });
-            // --- GRACEFUL DISCONNECT ---
-            conn.on('close', () => { alert("Friend disconnected!"); location.reload(); });
+
+            state.peer.on('open', id => {
+                state.myId = id;
+                document.getElementById('my-id').innerHTML = `
+                    <div class="code-display">${id}</div>
+                    <p style="margin-top: 10px; color: #8b949e;">Share this code</p>
+                `;
+                document.getElementById('join-btn').disabled = false;
+            });
+
+            state.peer.on('connection', conn => {
+                if (state.conn) {
+                    conn.close();
+                    return;
+                }
+                state.isHost = true;
+                state.myColor = 'w';
+                state.isMyTurn = true;
+                state.currentPlayer = 'w';
+                state.conn = conn;
+                setupConnection();
+                startGame();
+            });
+
+            state.peer.on('error', err => {
+                let msg = 'Connection error';
+                if (err.type === 'peer-unavailable') msg = 'Player not found';
+                showError(msg);
+            });
+        }
+
+        function connect() {
+            const friendId = document.getElementById('join-id').value.trim();
+            if (!friendId || friendId.length !== 4) {
+                showError('Enter valid 4-digit code');
+                return;
+            }
+
+            state.isHost = false;
+            state.myColor = 'b';
+            state.isMyTurn = false;
+            state.currentPlayer = 'w';
+            state.conn = state.peer.connect(friendId, { reliable: true });
+            
+            document.getElementById('my-id').innerHTML = '<span class="spinner"></span> Connecting...';
+            
+            state.conn.on('open', () => {
+                setupConnection();
+                startGame();
+            });
+
+            setTimeout(() => {
+                if (!state.gameActive) {
+                    showError('Connection failed');
+                    document.getElementById('join-btn').disabled = false;
+                }
+            }, 10000);
+        }
+
+        function setupConnection() {
+            document.getElementById('chat-container').style.display = 'flex';
+            
+            state.conn.on('data', data => {
+                if (!data || !data.type) return;
+                
+                switch(data.type) {
+                    case 'MOVE':
+                        // FIXED: Validate move data
+                        if (data.move && data.board && data.currentPlayer) {
+                            applyMove(data.move, data.board, data.currentPlayer);
+                        }
+                        break;
+                    case 'CHAT':
+                        addChatMessage(data.msg, false);
+                        break;
+                    case 'RESIGN':
+                        endGame(state.myColor);
+                        break;
+                }
+            });
+
+            state.conn.on('close', () => {
+                showError('Opponent disconnected');
+                state.gameActive = false;
+            });
+        }
+
+        function startGame() {
+            document.getElementById('setup').style.display = 'none';
+            initBoard();
+            state.gameActive = true;
+            state.captures = { w: 0, b: 0 };
+            
+            document.getElementById('player-info').textContent = 
+                'You play ' + (state.myColor === 'w' ? 'White' : 'Black');
+            
+            checkMustJump();
+            renderBoard();
+            updateTurnDisplay();
+        }
+
+        function startSolo() {
+            state.isSolo = true;
+            state.isMyTurn = true;
+            state.myColor = 'w';
+            state.currentPlayer = 'w';
+            startGame();
+        }
+
+        function renderBoard() {
+            const boardEl = document.getElementById('board');
+            boardEl.innerHTML = '';
+            
+            const isFlipped = state.myColor === 'b' && !state.isSolo;
+            
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const displayR = isFlipped ? 7 - r : r;
+                    const displayC = isFlipped ? 7 - c : c;
+                    
+                    const sq = document.createElement('div');
+                    sq.className = `sq ${(r + c) % 2 === 0 ? 'light' : 'dark'}`;
+                    sq.dataset.r = displayR;
+                    sq.dataset.c = displayC;
+                    
+                    // Highlight selected
+                    if (state.selected && state.selected.r === displayR && state.selected.c === displayC) {
+                        sq.classList.add('selected');
+                    }
+                    
+                    // Highlight valid moves
+                    if (state.selected) {
+                        const validMoves = getValidMoves(state.selected.r, state.selected.c, true);
+                        const move = validMoves.find(m => m.r === displayR && m.c === displayC);
+                        if (move) {
+                            sq.classList.add(move.jump ? 'valid-jump' : 'valid-move');
+                        }
+                    }
+                    
+                    const piece = state.board[displayR][displayC];
+                    if (piece) {
+                        const container = document.createElement('div');
+                        container.className = 'piece-container';
+                        
+                        const p = document.createElement('div');
+                        p.className = `piece ${piece[0] === 'w' ? 'white' : 'black'} ${piece.includes('k') ? 'king' : ''}`;
+                        container.appendChild(p);
+                        sq.appendChild(container);
+                    }
+                    
+                    sq.onclick = () => handleClick(displayR, displayC);
+                    boardEl.appendChild(sq);
+                }
+            }
+            
+            // Update counts
+            const wCount = state.board.flat().filter(p => p && p[0] === 'w').length;
+            const bCount = state.board.flat().filter(p => p && p[0] === 'b').length;
+            document.getElementById('captures').textContent = `White: ${wCount} | Black: ${bCount}`;
+            document.getElementById('white-score').textContent = wCount;
+            document.getElementById('black-score').textContent = bCount;
+        }
+
+        // FIXED: Proper move validation with king single-square movement
+        function getValidMoves(r, c, checkJumpsOnly = false) {
+            const piece = state.board[r][c];
+            if (!piece) return [];
+            
+            const isKing = piece.includes('k');
+            const isWhite = piece[0] === 'w';
+            const moves = [];
+            const jumps = [];
+            
+            // FIXED: Kings move only 1 square (not flying kings)
+            const directions = [];
+            if (isWhite || isKing) directions.push({dr: -1, dc: -1}, {dr: -1, dc: 1});
+            if (!isWhite || isKing) directions.push({dr: 1, dc: -1}, {dr: 1, dc: 1});
+            
+            // Check jumps first (mandatory)
+            for (const dir of directions) {
+                const mr = r + dir.dr;
+                const mc = c + dir.dc;
+                const jr = r + dir.dr * 2;
+                const jc = c + dir.dc * 2;
+                
+                if (isValidPos(jr, jc) && state.board[mr][mc] && 
+                    state.board[mr][mc][0] !== piece[0] && !state.board[jr][jc]) {
+                    jumps.push({r: jr, c: jc, jump: {r: mr, c: mc}});
+                }
+            }
+            
+            // If in multi-jump, only allow more jumps
+            if (state.multiJump) {
+                return jumps;
+            }
+            
+            // If jumps available anywhere, must take them
+            if (jumps.length > 0) {
+                return jumps;
+            }
+            
+            if (checkJumpsOnly) return [];
+            
+            // Regular moves (single square only)
+            for (const dir of directions) {
+                const nr = r + dir.dr;
+                const nc = c + dir.dc;
+                if (isValidPos(nr, nc) && !state.board[nr][nc]) {
+                    moves.push({r: nr, c: nc, jump: null});
+                }
+            }
+            
+            return moves;
+        }
+
+        function isValidPos(r, c) {
+            return r >= 0 && r < 8 && c >= 0 && c < 8;
+        }
+
+        // FIXED: Debounced click handler with comprehensive validation
+        function handleClick(r, c) {
+            const now = Date.now();
+            if (now - state.lastMoveTime < 200) return;
+            if (state.processingMove) return;
+            
+            if (!state.gameActive) return;
+            
+            // Determine whose turn it is
+            const turnColor = state.isSolo ? state.currentPlayer : (state.isMyTurn ? state.myColor : null);
+            if (!turnColor) return;
+            
+            const piece = state.board[r][c];
+            const myPieces = turnColor === 'w' ? ['w', 'wk'] : ['b', 'bk'];
+            
+            // If in multi-jump, can only continue from last position
+            if (state.multiJump) {
+                if (!state.lastJumpDest || state.lastJumpDest.r !== r || state.lastJumpDest.c !== c) {
+                    // Clicked elsewhere - end turn
+                    endTurn();
+                    return;
+                }
+            }
+            
+            if (state.selected) {
+                // Try to move
+                const validMoves = getValidMoves(state.selected.r, state.selected.c, true);
+                const move = validMoves.find(m => m.r === r && m.c === c);
+                
+                // Also check regular moves if no jumps
+                const regularMoves = validMoves.length === 0 ? 
+                    getValidMoves(state.selected.r, state.selected.c, false) : [];
+                const regularMove = regularMoves.find(m => m.r === r && m.c === c);
+                
+                const chosenMove = move || regularMove;
+                
+                if (chosenMove && !state.board[r][c]) {
+                    state.processingMove = true;
+                    executeMove(state.selected, {r, c}, chosenMove.jump);
+                } else {
+                    // Invalid move - deselect
+                    state.selected = null;
+                    state.multiJump = false;
+                    renderBoard();
+                    
+                    // Try selecting new piece if it has valid moves
+                    if (piece && myPieces.includes(piece)) {
+                        const moves = getValidMoves(r, c, false);
+                        const hasJump = moves.some(m => m.jump);
+                        
+                        if (state.mustJump && !hasJump) {
+                            showError('You must capture! Select a piece that can jump.');
+                            state.processingMove = false;
+                            return;
+                        }
+                        
+                        if (moves.length > 0) {
+                            state.selected = {r, c};
+                            renderBoard();
+                        }
+                    }
+                    state.processingMove = false;
+                }
+            } else if (piece && myPieces.includes(piece)) {
+                // Select piece
+                const moves = getValidMoves(r, c, false);
+                const hasJump = moves.some(m => m.jump);
+                
+                if (state.mustJump && !hasJump) {
+                    showError('You must capture! This piece cannot jump.');
+                    return;
+                }
+                
+                if (moves.length > 0) {
+                    state.selected = {r, c};
+                    renderBoard                }
+            }
+        }
+
+        function executeMove(from, to, jump) {
+            const piece = state.board[from.r][from.c];
+            const wasKing = piece.includes('k');
+            
+            // Move piece
+            state.board[to.r][to.c] = piece;
+            state.board[from.r][from.c] = null;
+            
+            // Handle capture
+            if (jump) {
+                const captured = state.board[jump.r][jump.c];
+                state.board[jump.r][jump.c] = null;
+                state.captures[state.currentPlayer]++;
+                
+                // Check king promotion (can happen during jump)
+                const shouldKing = !wasKing && ((piece[0] === 'w' && to.r === 0) || (piece[0] === 'b' && to.r === 7));
+                if (shouldKing) {
+                    state.board[to.r][to.c] = piece[0] + 'k';
+                }
+                
+                // Check for more jumps with NEW king status
+                state.selected = to;
+                state.lastJumpDest = to;
+                state.multiJump = true;
+                
+                const moreJumps = getValidMoves(to.r, to.c, true);
+                if (moreJumps.length > 0) {
+                    state.processingMove = false;
+                    renderBoard();
+                    return; // Continue jumping
+                }
+            } else {
+                // Regular move - check king promotion
+                const shouldKing = !wasKing && ((piece[0] === 'w' && to.r === 0) || (piece[0] === 'b' && to.r === 7));
+                if (shouldKing) {
+                    state.board[to.r][to.c] = piece[0] + 'k';
+                }
+            }
+            
+            // Send move to opponent
+            if (!state.isSolo && state.conn) {
+                state.conn.send({
+                    type: 'MOVE',
+                    move: { from, to, jump },
+                    board: state.board,
+                    captures: state.captures,
+                    currentPlayer: state.currentPlayer
+                });
+            }
+            
+            state.lastMoveTime = Date.now();
+            endTurn();
+        }
+
+        function applyMove(moveData, boardData, currentPlayer) {
+            // Validate data
+            if (!boardData || boardData.length !== 8) return;
+            
+            state.board = boardData;
+            if (moveData.captures) state.captures = moveData.captures;
+            
+            // Switch turns
+            state.currentPlayer = currentPlayer === 'w' ? 'b' : 'w';
+            state.isMyTurn = (state.currentPlayer === state.myColor);
+            
+            state.selected = null;
+            state.multiJump = false;
+            state.lastJumpDest = null;
+            state.processingMove = false;
+            
+            checkMustJump();
+            renderBoard();
+            updateTurnDisplay();
+            checkWinCondition();
+        }
+
+        function endTurn() {
+            state.selected = null;
+            state.multiJump = false;
+            state.lastJumpDest = null;
+            state.processingMove = false;
+            
+            if (!state.isSolo) {
+                state.currentPlayer = state.currentPlayer === 'w' ? 'b' : 'w';
+                state.isMyTurn = (state.currentPlayer === state.myColor);
+            } else {
+                // Solo mode: switch current player
+                state.currentPlayer = state.currentPlayer === 'w' ? 'b' : 'w';
+            }
+            
+            checkMustJump();
+            renderBoard();
+            updateTurnDisplay();
+            checkWinCondition();
+        }
+
+        function checkMustJump() {
+            const turnColor = state.isSolo ? state.currentPlayer : state.myColor;
+            const myPieces = turnColor === 'w' ? ['w', 'wk'] : ['b', 'bk'];
+            state.mustJump = false;
+            
+            // Check all pieces for possible jumps
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    if (myPieces.includes(state.board[r][c])) {
+                        const jumps = getValidMoves(r, c, true);
+                        if (jumps.length > 0) {
+                            state.mustJump = true;
+                            document.getElementById('must-jump').style.display = 'block';
+                            setTimeout(() => {
+                                document.getElementById('must-jump').style.display = 'none';
+                            }, 2000);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        function checkWinCondition() {
+            const whitePieces = state.board.flat().filter(p => p && p[0] === 'w').length;
+            const blackPieces = state.board.flat().filter(p => p && p[0] === 'b').length;
+            
+            if (whitePieces === 0) {
+                endGame('b');
+                return;
+            } else if (blackPieces === 0) {
+                endGame('w');
+                return;
+            }
+            
+            // Check for no valid moves (stalemate)
+            const currentColor = state.currentPlayer;
+            const pieces = currentColor === 'w' ? ['w', 'wk'] : ['b', 'bk'];
+            let hasMoves = false;
+            
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    if (pieces.includes(state.board[r][c])) {
+                        const moves = getValidMoves(r, c, false);
+                        if (moves.length > 0) {
+                            hasMoves = true;
+                            break;
+                        }
+                    }
+                }
+                if (hasMoves) break;
+            }
+            
+            if (!hasMoves) {
+                // Stalemate - other player wins
+                endGame(currentColor === 'w' ? 'b' : 'w');
+            }
+        }
+
+        function endGame(winner) {
+            state.gameActive = false;
+            
+            const screen = document.getElementById('end-screen');
+            const title = document.getElementById('end-title');
+            
+            screen.style.display = 'flex';
+            
+            const wCount = state.board.flat().filter(p => p && p[0] === 'w').length;
+            const bCount = state.board.flat().filter(p => p && p[0] === 'b').length;
+            document.getElementById('white-score').textContent = wCount;
+            document.getElementById('black-score').textContent = bCount;
+            
+            const iWon = (state.isSolo && winner === 'w') || (!state.isSolo && winner === state.myColor);
+            title.textContent = iWon ? '🎉 You Win!' : '😔 You Lose';
+            title.style.color = iWon ? '#238636' : '#da3633';
+            
+            if (state.conn) state.conn.send({ type: 'GAME_OVER', winner });
+        }
+
+        function updateTurnDisplay() {
+            const turn = document.getElementById('turn');
+            if (!state.gameActive) return;
+            
+            if (state.isSolo) {
+                turn.textContent = (state.currentPlayer === 'w' ? '⚪ White' : '⚫ Black') + ' to move';
+                turn.style.color = state.currentPlayer === 'w' ? '#58a6ff' : '#eec27e';
+            } else {
+                turn.textContent = state.isMyTurn ? '★ Your Turn' : "Opponent's Turn";
+                turn.style.color = state.isMyTurn ? '#58a6ff' : '#eec27e';
+            }
+        }
+
+        // Chat
+        document.getElementById('chat-input').addEventListener('keypress', e => {
+            if (e.key === 'Enter' && e.target.value.trim()) {
+                const msg = e.target.value.trim();
+                addChatMessage(msg, true);
+                if (state.conn) state.conn.send({ type: 'CHAT', msg: msg });
+                e.target.value = '';
+            }
         });
-    }
-    function start() { document.getElementById('setup').style.display='none'; render(); }
-    chatInput.addEventListener('keypress', (e) => {
-        if(e.key === 'Enter' && conn) {
-            const msg = chatInput.value;
-            if(msg.trim() === "") return;
-            conn.send({type: 'CHAT', msg: msg});
-            addMessage('You', msg);
-            chatInput.value = '';
+
+        function addChatMessage(msg, isSelf) {
+            const div = document.createElement('div');
+            div.className = 'msg ' + (isSelf ? 'self' : 'other');
+            div.textContent = msg;
+            document.getElementById('chat-msgs').appendChild(div);
+            document.getElementById('chat-msgs').scrollTop = 999999;
         }
-    });
-    function addMessage(user, msg) { chatMsgs.innerHTML += `<div><strong>${user}:</strong> ${msg}</div>`; chatMsgs.scrollTop = chatMsgs.scrollHeight; }
-    function isValid(fr, fc, tr, tc) {
-        const p = game[fr][fc], dr = tr - fr, dc = Math.abs(tc - fc);
-        const isK = p.includes('K'), type = p[0], fwd = (type === 'w' || isK) && dr < 0, bwd = (type === 'b' || isK) && dr > 0;
-        if(dc === 1 && (fwd || bwd)) return {j: false};
-        if(dc === 2 && (fwd || bwd)) {
-            const mr = fr + dr/2, mc = fc + (tc-fc)/2;
-            if(game[mr][mc] && game[mr][mc][0] !== type) return {j: true, mr, mc};
+
+        function showError(msg) {
+            const el = document.getElementById('error');
+            el.textContent = msg;
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 3000);
         }
-        return null;
-    }
-    function render() {
-        boardEl.innerHTML = ''; document.getElementById('turn').innerText = isMyTurn ? "★ YOUR TURN ★" : "OPPONENT'S TURN";
-        for(let r=0; r<8; r++) for(let c=0; c<8; c++) {
-            const s = document.createElement('div'); s.className = `sq ${(r+c)%2===0?'l':'d'}`;
-            if(sel && sel.r===r && sel.c===c) s.classList.add('sel');
-            if(game[r][c]) s.innerHTML = `<div class="piece p-${game[r][c][0]} ${game[r][c].includes('K')?'king':''}"></div>`;
-            s.onclick = () => {
-                if(!isMyTurn) return;
-                if(sel) {
-                    const m = isValid(sel.r, sel.c, r, c);
-                    if(!game[r][c] && m) {
-                        let p = game[sel.r][sel.c]; if((myCol==='w'&&r===0)||(myCol==='b'&&r===7)) p=p[0]+'K';
-                        game[r][c] = p; game[sel.r][sel.c] = ''; if(m.j) game[m.mr][m.mc] = '';
-                        sel = null; isMyTurn = false; if(conn) conn.send({game}); render();
-                    } else sel = null; render();
-                } else if(game[r][c][0] === myCol) { sel = {r,c}; render(); }
-            };
-            boardEl.appendChild(s);
-        }
-    }
-</script>
+
+        window.addEventListener('load', initPeer);
+    </script>
 </body>
 </html>
