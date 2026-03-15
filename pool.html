@@ -278,11 +278,15 @@
             <h1>🎱 Pro Pool</h1>
             <p class="subtitle">8-Ball rules. Sink your balls, then the 8-ball.</p>
 
-            <div id="my-id"><span class="spinner"></span></div>
+            <div id="my-id">
+                <div class="code-display" id="code-display">----</div>
+                <p style="margin-top: 10px; color: #8b949e;">Share this code with friend</p>
+                <button class="btn" onclick="generateNewCode()" style="margin-top: 10px;">Generate New Code</button>
+            </div>
 
             <div class="input-group">
                 <input type="text" id="join-id" placeholder="Enter 4-digit code" maxlength="4">
-                <button class="btn" id="join-btn" onclick="connect()" disabled>Join Match</button>
+                <button class="btn" id="join-btn" onclick="connect()">Join Match</button>
                 <button class="btn btn-secondary" onclick="startSolo()">Practice Solo</button>
             </div>
         </div>
@@ -322,10 +326,10 @@
         const BALL_RADIUS = 11;
         const BALL_DIAMETER = BALL_RADIUS * 2;
         const POCKET_RADIUS = 28;
-        const MAX_POWER = 35;  // INCREASED from 25 for stronger shots
-        const FRICTION_COEFF = 0.988;  // INCREASED from 0.985 for less friction
-        const ROLLING_FRICTION = 0.995;  // INCREASED from 0.99
-        const STOP_THRESHOLD = 0.02;  // DECREASED from 0.05 for longer rolling
+        const MAX_POWER = 35;
+        const FRICTION_COEFF = 0.988;
+        const ROLLING_FRICTION = 0.995;
+        const STOP_THRESHOLD = 0.02;
         const SPIN_DECAY = 0.98;
         const PHYSICS_FPS = 120;
         const PHYSICS_DT = 1000 / PHYSICS_FPS;
@@ -364,7 +368,7 @@
             dragStart: null,
             dragCurrent: null,
             canShoot: true,
-            mousePos: new Vector2(0, 0),  // Track mouse for cue stick
+            mousePos: new Vector2(0, 0),
 
             // Networking
             peer: null,
@@ -385,7 +389,7 @@
         const ctx = canvas.getContext('2d', { alpha: false });
 
         // ==========================================
-        // VECTOR MATH (100% accurate)
+        // VECTOR MATH
         // ==========================================
         class Vector2 {
             constructor(x = 0, y = 0) {
@@ -394,102 +398,73 @@
             }
 
             clone() { return new Vector2(this.x, this.y); }
-
             add(v) { return new Vector2(this.x + v.x, this.y + v.y); }
             sub(v) { return new Vector2(this.x - v.x, this.y - v.y); }
             mul(s) { return new Vector2(this.x * s, this.y * s); }
-
             dot(v) { return this.x * v.x + this.y * v.y; }
             cross(v) { return this.x * v.y - this.y * v.x; }
-
             length() { return Math.sqrt(this.x * this.x + this.y * this.y); }
             lengthSq() { return this.x * this.x + this.y * this.y; }
-
             normalize() {
                 const len = this.length();
                 if (len === 0) return new Vector2(0, 0);
                 return new Vector2(this.x / len, this.y / len);
             }
-
             rotate(angle) {
                 const cos = Math.cos(angle);
                 const sin = Math.sin(angle);
-                return new Vector2(
-                    this.x * cos - this.y * sin,
-                    this.x * sin + this.y * cos
-                );
+                return new Vector2(this.x * cos - this.y * sin, this.x * sin + this.y * cos);
             }
-
             dist(v) { return Math.sqrt((this.x - v.x) ** 2 + (this.y - v.y) ** 2); }
             distSq(v) { return (this.x - v.x) ** 2 + (this.y - v.y) ** 2; }
         }
 
         // ==========================================
-        // BALL CLASS - Proper physics
+        // BALL CLASS
         // ==========================================
         class Ball {
             constructor(x, y, color, type, number) {
                 this.pos = new Vector2(x, y);
                 this.vel = new Vector2(0, 0);
                 this.oldPos = new Vector2(x, y);
-
                 this.color = color;
-                this.type = type; // 'cue', 'solid', 'stripe', 'eight'
+                this.type = type;
                 this.number = number;
                 this.radius = BALL_RADIUS;
                 this.mass = 1;
                 this.potted = false;
-
-                // Spin (English) - affects ball movement
-                this.spin = new Vector2(0, 0); // Top/back spin, left/right
+                this.spin = new Vector2(0, 0);
                 this.angularVel = 0;
-
                 this.id = number || 0;
             }
 
             get speed() { return this.vel.length(); }
             get moving() { return this.speed > STOP_THRESHOLD; }
 
-            // Verlet integration for stability
             update(dt) {
                 if (this.potted) return;
 
-                // Apply friction based on velocity and spin
                 const speed = this.speed;
                 if (speed > 0) {
-                    // Sliding friction
                     let friction = Math.pow(FRICTION_COEFF, speed * dt * 60);
-
-                    // Rolling friction when slow
-                    if (speed < 2) {
-                        friction *= ROLLING_FRICTION;
-                    }
-
+                    if (speed < 2) friction *= ROLLING_FRICTION;
                     this.vel = this.vel.mul(friction);
-
-                    // Apply spin effect (simplified Magnus effect)
                     const spinEffect = this.spin.mul(0.1 * dt * 60);
                     this.vel = this.vel.add(spinEffect);
-
-                    // Decay spin
                     this.spin = this.spin.mul(SPIN_DECAY);
                     this.angularVel *= SPIN_DECAY;
                 }
 
-                // Stop if very slow
                 if (this.speed < STOP_THRESHOLD) {
                     this.vel = new Vector2(0, 0);
                     this.spin = new Vector2(0, 0);
                     this.angularVel = 0;
                 }
 
-                // Update position
                 this.oldPos = this.pos.clone();
-                this.pos = this.pos.add(this.vel.mul(dt * 60)); // Scale to pixels/frame
+                this.pos = this.pos.add(this.vel.mul(dt * 60));
 
-                // Wall collisions with restitution
                 const restitution = 0.85;
-
                 if (this.pos.x - this.radius < 0) {
                     this.pos.x = this.radius;
                     this.vel.x = Math.abs(this.vel.x) * restitution;
@@ -513,71 +488,34 @@
             }
 
             applyWallFriction(normal) {
-                // Transfer some velocity to spin on wall hit
                 const tangent = new Vector2(-normal.y, normal.x);
                 const tangentVel = this.vel.dot(tangent);
                 this.spin = this.spin.add(tangent.mul(tangentVel * 0.3));
                 this.vel = this.vel.sub(tangent.mul(tangentVel * 0.2));
             }
 
-            // Continuous collision detection
-            sweepAgainst(other, dt) {
-                if (this.potted || other.potted) return false;
-
-                const relativeVel = this.vel.sub(other.vel);
-                const relativePos = this.pos.sub(other.pos);
-                const radiusSum = this.radius + other.radius;
-
-                // Quadratic equation for intersection
-                const a = relativeVel.lengthSq();
-                const b = 2 * relativePos.dot(relativeVel);
-                const c = relativePos.lengthSq() - radiusSum * radiusSum;
-
-                const discriminant = b * b - 4 * a * c;
-
-                if (discriminant < 0 || a === 0) return false;
-
-                const t = (-b - Math.sqrt(discriminant)) / (2 * a);
-
-                if (t >= 0 && t <= dt * 60) {
-                    // Move to collision point
-                    this.pos = this.pos.add(this.vel.mul(t));
-                    other.pos = other.pos.add(other.vel.mul(t));
-                    return true;
-                }
-
-                return false;
-            }
-
             resolveCollision(other) {
                 const normal = this.pos.sub(other.pos).normalize();
                 const relativeVel = this.vel.sub(other.vel);
                 const velAlongNormal = relativeVel.dot(normal);
+                if (velAlongNormal > 0) return;
 
-                if (velAlongNormal > 0) return; // Moving apart
-
-                // Elastic collision with energy conservation
                 const restitution = 0.95;
                 const j = -(1 + restitution) * velAlongNormal / (1/this.mass + 1/other.mass);
-
                 const impulse = normal.mul(j);
                 this.vel = this.vel.add(impulse.mul(1/this.mass));
                 other.vel = other.vel.sub(impulse.mul(1/other.mass));
 
-                // Friction/tangent impulse for spin transfer
                 const tangent = new Vector2(-normal.y, normal.x);
                 const velAlongTangent = relativeVel.dot(tangent);
                 const frictionImpulse = tangent.mul(-velAlongTangent * 0.3);
-
                 this.vel = this.vel.add(frictionImpulse);
                 other.vel = other.vel.sub(frictionImpulse);
 
-                // Transfer spin
                 const spinTransfer = normal.mul(this.spin.sub(other.spin).dot(normal) * 0.5);
                 this.spin = this.spin.sub(spinTransfer);
                 other.spin = other.spin.add(spinTransfer);
 
-                // Separate overlapping balls
                 const overlap = (this.radius + other.radius) - this.pos.dist(other.pos);
                 if (overlap > 0) {
                     const separation = normal.mul(overlap / 2 + 0.1);
@@ -589,20 +527,14 @@
             draw(ctx) {
                 if (this.potted) return;
 
-                // Shadow
                 ctx.fillStyle = 'rgba(0,0,0,0.4)';
                 ctx.beginPath();
                 ctx.arc(this.pos.x + 3, this.pos.y + 3, this.radius, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Ball gradient based on light source
                 const grad = ctx.createRadialGradient(
-                    this.pos.x - this.radius * 0.3,
-                    this.pos.y - this.radius * 0.3,
-                    0,
-                    this.pos.x,
-                    this.pos.y,
-                    this.radius
+                    this.pos.x - this.radius * 0.3, this.pos.y - this.radius * 0.3, 0,
+                    this.pos.x, this.pos.y, this.radius
                 );
 
                 if (this.type === 'cue') {
@@ -624,18 +556,14 @@
                 ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Stripe for striped balls
                 if (this.type === 'stripe') {
                     ctx.save();
                     ctx.translate(this.pos.x, this.pos.y);
-                    // Rotate based on spin
                     ctx.rotate(this.angularVel * 0.5);
-
                     ctx.fillStyle = 'rgba(255,255,255,0.95)';
                     ctx.beginPath();
                     ctx.arc(0, 0, this.radius * 0.65, 0, Math.PI * 2);
                     ctx.fill();
-
                     ctx.fillStyle = this.color;
                     ctx.beginPath();
                     ctx.arc(0, 0, this.radius * 0.45, 0, Math.PI * 2);
@@ -643,13 +571,11 @@
                     ctx.restore();
                 }
 
-                // Number circle
                 if (this.number && this.type !== 'cue') {
                     ctx.fillStyle = 'rgba(255,255,255,0.9)';
                     ctx.beginPath();
                     ctx.arc(this.pos.x, this.pos.y, this.radius * 0.5, 0, Math.PI * 2);
                     ctx.fill();
-
                     ctx.fillStyle = this.type === 'eight' ? 'white' : 'black';
                     ctx.font = `bold ${this.radius}px Arial`;
                     ctx.textAlign = 'center';
@@ -657,16 +583,9 @@
                     ctx.fillText(this.number, this.pos.x, this.pos.y + 1);
                 }
 
-                // Specular highlight
                 ctx.fillStyle = 'rgba(255,255,255,0.6)';
                 ctx.beginPath();
-                ctx.arc(
-                    this.pos.x - this.radius * 0.35,
-                    this.pos.y - this.radius * 0.35,
-                    this.radius * 0.25,
-                    0,
-                    Math.PI * 2
-                );
+                ctx.arc(this.pos.x - this.radius * 0.35, this.pos.y - this.radius * 0.35, this.radius * 0.25, 0, Math.PI * 2);
                 ctx.fill();
             }
 
@@ -679,21 +598,10 @@
                 return "#" + (0x1000000 + R*0x10000 + G*0x100 + B).toString(16).slice(1);
             }
 
-            darken(color, percent) {
-                return this.lighten(color, -percent);
-            }
+            darken(color, percent) { return this.lighten(color, -percent); }
 
             serialize() {
-                return {
-                    id: this.id,
-                    x: this.pos.x,
-                    y: this.pos.y,
-                    vx: this.vel.x,
-                    vy: this.vel.y,
-                    sx: this.spin.x,
-                    sy: this.spin.y,
-                    potted: this.potted
-                };
+                return { id: this.id, x: this.pos.x, y: this.pos.y, vx: this.vel.x, vy: this.vel.y, sx: this.spin.x, sy: this.spin.y, potted: this.potted };
             }
 
             deserialize(data) {
@@ -710,46 +618,32 @@
         const Physics = {
             step(dt) {
                 const balls = state.balls;
-                const steps = 4; // Sub-steps for stability
+                const steps = 4;
                 const subDt = dt / steps;
 
                 for (let step = 0; step < steps; step++) {
-                    // Update positions
                     balls.forEach(ball => ball.update(subDt));
-
-                    // Check collisions (multiple passes for stability)
                     for (let pass = 0; pass < 3; pass++) {
                         for (let i = 0; i < balls.length; i++) {
                             for (let j = i + 1; j < balls.length; j++) {
-                                const b1 = balls[i];
-                                const b2 = balls[j];
-
+                                const b1 = balls[i], b2 = balls[j];
                                 if (b1.potted || b2.potted) continue;
-
                                 const distSq = b1.pos.distSq(b2.pos);
                                 const minDist = b1.radius + b2.radius;
-
-                                if (distSq < minDist * minDist) {
-                                    b1.resolveCollision(b2);
-                                }
+                                if (distSq < minDist * minDist) b1.resolveCollision(b2);
                             }
                         }
                     }
                 }
-
-                // Check pockets after all physics steps
                 this.checkPockets();
             },
 
             checkPockets() {
                 state.balls.forEach(ball => {
                     if (ball.potted) return;
-
                     for (const pocket of POCKETS) {
                         const pocketPos = new Vector2(pocket.x, pocket.y);
-                        const dist = ball.pos.dist(pocketPos);
-
-                        if (dist < POCKET_RADIUS - 2) {
+                        if (ball.pos.dist(pocketPos) < POCKET_RADIUS - 2) {
                             ball.potted = true;
                             ball.vel = new Vector2(0, 0);
                             handleBallPotted(ball);
@@ -759,9 +653,7 @@
                 });
             },
 
-            anyMoving() {
-                return state.balls.some(b => !b.potted && b.moving);
-            }
+            anyMoving() { return state.balls.some(b => !b.potted && b.moving); }
         };
 
         // ==========================================
@@ -769,29 +661,18 @@
         // ==========================================
         function initRack() {
             state.balls = [];
-
-            // Cue ball in kitchen (left side)
             state.cueBall = new Ball(150, TABLE_HEIGHT/2, '#ffffff', 'cue', 0);
             state.balls.push(state.cueBall);
 
-            // Rack formation
-            const startX = 600;
-            const startY = TABLE_HEIGHT/2;
-            const spacing = BALL_RADIUS * Math.sqrt(3);
-
-            const colors = [
-                '#f44336', '#ff9800', '#ffeb3b', '#4caf50', 
-                '#2196f3', '#3f51b5', '#9c27b0', '#795548'
-            ];
+            const startX = 600, startY = TABLE_HEIGHT/2, spacing = BALL_RADIUS * Math.sqrt(3);
+            const colors = ['#f44336', '#ff9800', '#ffeb3b', '#4caf50', '#2196f3', '#3f51b5', '#9c27b0', '#795548'];
 
             let ballIndex = 0;
             for (let row = 0; row < 5; row++) {
                 for (let col = 0; col <= row; col++) {
                     const x = startX + row * spacing;
                     const y = startY + (col - row/2) * BALL_DIAMETER;
-
                     if (row === 2 && col === 1) {
-                        // 8-ball in center
                         state.eightBall = new Ball(x, y, '#000000', 'eight', 8);
                         state.balls.push(state.eightBall);
                     } else {
@@ -808,86 +689,46 @@
 
         function handleBallPotted(ball) {
             if (state.gameEnded) return;
+            if (ball.type === 'cue') { handleCueBallPotted(); return; }
 
-            // Handle cue ball scratch
-            if (ball.type === 'cue') {
-                handleCueBallPotted();
-                return;
-            }
-
-            // First ball potted determines types
             if (!state.assignedType && !state.isSolo && ball.type !== 'eight') {
-                if (state.isMyTurn) {
-                    state.myType = ball.type;
-                    state.opponentType = ball.type === 'solid' ? 'stripe' : 'solid';
-                } else {
-                    state.opponentType = ball.type;
-                    state.myType = ball.type === 'solid' ? 'stripe' : 'solid';
-                }
+                if (state.isMyTurn) { state.myType = ball.type; state.opponentType = ball.type === 'solid' ? 'stripe' : 'solid'; }
+                else { state.opponentType = ball.type; state.myType = ball.type === 'solid' ? 'stripe' : 'solid'; }
                 state.assignedType = true;
                 updatePlayerBadges();
             }
 
-            // Check 8-ball rules
-            if (ball.type === 'eight') {
-                checkEightBallWin();
-            }
+            if (ball.type === 'eight') checkEightBallWin();
         }
 
         function checkEightBallWin() {
             const myBalls = state.balls.filter(b => b.type === state.myType && !b.potted);
             const isValidWin = myBalls.length === 0 && state.isMyTurn;
-
-            if (isValidWin) {
-                endGame(true, 'You legally pocketed the 8-ball!');
-            } else {
-                const reason = !state.isMyTurn ? 
-                    '8-ball pocketed on opponent turn' : 
-                    '8-ball pocketed with balls remaining';
-                endGame(false, reason);
-            }
+            if (isValidWin) endGame(true, 'You legally pocketed the 8-ball!');
+            else endGame(false, !state.isMyTurn ? '8-ball pocketed on opponent turn' : '8-ball pocketed with balls remaining');
         }
 
         function handleCueBallPotted() {
             showError('Cue ball scratched!');
-
-            if (!state.isSolo) {
-                // Turn passes to opponent
-                state.isMyTurn = false;
-                Network.send({ type: 'SCRATCH' });
-            }
-
-            // Respawn cue ball after physics settle
-            setTimeout(() => {
-                spotCueBall();
-            }, 500);
+            if (!state.isSolo) { state.isMyTurn = false; Network.send({ type: 'SCRATCH' }); }
+            setTimeout(() => spotCueBall(), 500);
         }
 
         function spotCueBall() {
-            // Find valid position in kitchen (left quarter)
-            const kitchenX = 150;
             const kitchenWidth = TABLE_WIDTH / 4;
+            let bestPos = new Vector2(150, TABLE_HEIGHT/2), bestDist = 0;
 
-            let bestPos = new Vector2(kitchenX, TABLE_HEIGHT/2);
-            let bestDist = 0;
-
-            // Try several positions to find one with clearance
             for (let y = 50; y < TABLE_HEIGHT - 50; y += 20) {
                 for (let x = 50; x < kitchenWidth; x += 20) {
                     const testPos = new Vector2(x, y);
                     let minDist = Infinity;
-
                     for (const ball of state.balls) {
                         if (ball !== state.cueBall && !ball.potted) {
                             const dist = testPos.dist(ball.pos) - ball.radius;
                             if (dist < minDist) minDist = dist;
                         }
                     }
-
-                    if (minDist > bestDist && minDist > BALL_RADIUS * 2) {
-                        bestDist = minDist;
-                        bestPos = testPos;
-                    }
+                    if (minDist > bestDist && minDist > BALL_RADIUS * 2) { bestDist = minDist; bestPos = testPos; }
                 }
             }
 
@@ -895,112 +736,85 @@
             state.cueBall.pos = bestPos;
             state.cueBall.vel = new Vector2(0, 0);
             state.cueBall.spin = new Vector2(0, 0);
-
-            if (!state.isSolo && !state.isMyTurn) {
-                Network.send({ type: 'CUE_POSITION', pos: { x: bestPos.x, y: bestPos.y } });
-            }
+            if (!state.isSolo && !state.isMyTurn) Network.send({ type: 'CUE_POSITION', pos: { x: bestPos.x, y: bestPos.y } });
         }
 
         function endTurn() {
-            if (state.isSolo) {
-                state.isMyTurn = true;
-                updateTurnDisplay();
-                return;
-            }
+            if (state.isSolo) { state.isMyTurn = true; updateTurnDisplay(); return; }
 
-            // Calculate what happened this turn
             const pottedBalls = state.balls.filter(b => b.potted && b !== state.cueBall);
             const myBallsPotted = pottedBalls.filter(b => b.type === state.myType).length;
             const opponentBallsPotted = pottedBalls.filter(b => b.type === state.opponentType).length;
             const cuePotted = state.cueBall.potted;
 
-            // If cue was potted, we already handled it in handleCueBallPotted
-            // Just need to wait for respawn, don't change turn again
-            if (cuePotted) {
-                updateTurnDisplay();
-                return;
-            }
+            if (cuePotted) { updateTurnDisplay(); return; }
 
             let continueTurn = false;
-
-            if (opponentBallsPotted > 0 && myBallsPotted === 0) {
-                // Hit opponent ball first (foul) - turn passes
-                state.isMyTurn = false;
-            } else if (myBallsPotted > 0) {
-                // Potted own ball, continue
-                continueTurn = true;
-            } else {
-                // No balls potted, turn passes
-                state.isMyTurn = false;
-            }
+            if (opponentBallsPotted > 0 && myBallsPotted === 0) state.isMyTurn = false;
+            else if (myBallsPotted > 0) continueTurn = true;
+            else state.isMyTurn = false;
 
             updateTurnDisplay();
-
-            // Send turn data to opponent
-            if (!continueTurn) {
-                Network.sendTurnPass();
-            } else {
-                Network.send({ type: 'CONTINUE_TURN' });
-            }
+            if (!continueTurn) Network.sendTurnPass();
+            else Network.send({ type: 'CONTINUE_TURN' });
         }
 
         // ==========================================
-        // NETWORKING - Authoritative with prediction
+        // NETWORKING - FIXED ID GENERATION
         // ==========================================
+        function generateNewCode() {
+            const code = Math.floor(1000 + Math.random() * 9000).toString();
+            document.getElementById('code-display').textContent = code;
+            state.myId = code;
+            initPeer(code);
+        }
+
+        function initPeer(peerId) {
+            if (state.peer) state.peer.destroy();
+
+            state.peer = new Peer(peerId, {
+                debug: 1,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                }
+            });
+
+            state.peer.on('open', id => {
+                console.log('Peer opened with ID:', id);
+                state.myId = id;
+            });
+
+            state.peer.on('connection', conn => {
+                if (state.conn) { conn.close(); return; }
+                setupConnection(conn, true);
+            });
+
+            state.peer.on('error', err => {
+                console.error('Peer error:', err);
+                let msg = 'Connection error';
+                if (err.type === 'peer-unavailable') msg = 'Player not found - check the code';
+                else if (err.type === 'unavailable-id') { msg = 'Code already in use, generating new one...'; generateNewCode(); }
+                else if (err.type === 'network') msg = 'Network error - try again';
+                else if (err.type === 'server-error') msg = 'Server error - try generating new code';
+                showError(msg);
+            });
+        }
+
         const Network = {
-            init() {
-                const randomId = Math.floor(1000 + Math.random() * 9000).toString();
-
-                state.peer = new Peer(randomId, {
-                    debug: 1,
-                    config: {
-                        iceServers: [
-                            { urls: 'stun:stun.l.google.com:19302' },
-                            { urls: 'stun:stun1.l.google.com:19302' }
-                        ]
-                    }
-                });
-
-                state.peer.on('open', id => {
-                    state.myId = id;
-                    document.getElementById('my-id').innerHTML = `
-                        <div class="code-display">${id}</div>
-                        <p style="margin-top: 10px; color: #8b949e;">Share this code</p>
-                    `;
-                    document.getElementById('join-btn').disabled = false;
-                });
-
-                state.peer.on('connection', conn => {
-                    if (state.conn) {
-                        conn.close();
-                        return;
-                    }
-                    this.setupConnection(conn, true);
-                });
-
-                state.peer.on('error', err => {
-                    let msg = 'Connection error';
-                    if (err.type === 'peer-unavailable') msg = 'Player not found';
-                    else if (err.type === 'network') msg = 'Network error';
-                    showError(msg);
-                });
-            },
-
             connect(peerId) {
-                const conn = state.peer.connect(peerId, { 
-                    reliable: true,
-                    serialization: 'json'
-                });
+                if (!state.peer) initPeer(state.myId || Math.floor(1000 + Math.random() * 9000).toString());
 
+                const conn = state.peer.connect(peerId, { reliable: true, serialization: 'json' });
                 document.getElementById('my-id').innerHTML = '<span class="spinner"></span> Connecting...';
 
-                conn.on('open', () => {
-                    this.setupConnection(conn, false);
-                });
+                conn.on('open', () => setupConnection(conn, false));
 
                 setTimeout(() => {
                     if (!state.gameActive) {
-                        showError('Connection failed');
+                        showError('Connection failed - check the code and try again');
                         document.getElementById('join-btn').disabled = false;
                     }
                 }, 10000);
@@ -1009,39 +823,33 @@
             setupConnection(conn, isHost) {
                 state.conn = conn;
                 state.isHost = isHost;
-                state.isMyTurn = isHost; // Host breaks
+                state.isMyTurn = isHost;
 
                 conn.on('data', data => this.handleMessage(data));
+                conn.on('close', () => { showError('Opponent disconnected'); state.gameActive = false; });
 
-                conn.on('close', () => {
-                    showError('Opponent disconnected');
-                    state.gameActive = false;
-                });
-
-                // Start ping monitoring
                 this.startPing();
-
-                // Start game
                 startGame();
             },
 
             handleMessage(data) {
                 switch(data.type) {
                     case 'SHOT':
-                        this.handleRemoteShot(data);
-                        break;
-                    case 'TURN_PASS':
-                        this.handleTurnPass(data);
-                        break;
-                    case 'CONTINUE_TURN':
-                        state.isMyTurn = false;
-                        updateTurnDisplay();
-                        break;
-                    case 'SCRATCH':
-                        // Opponent scratched, it's now our turn
+                        state.cueBall.vel = new Vector2(data.vx, data.vy);
+                        state.cueBall.spin = new Vector2(data.sx || 0, data.sy || 0);
                         state.isMyTurn = true;
                         updateTurnDisplay();
                         break;
+                    case 'TURN_PASS':
+                        state.isMyTurn = true;
+                        if (data.state) data.state.forEach(ballData => {
+                            const ball = state.balls.find(b => b.id === ballData.id);
+                            if (ball) ball.deserialize(ballData);
+                        });
+                        updateTurnDisplay();
+                        break;
+                    case 'CONTINUE_TURN': state.isMyTurn = false; updateTurnDisplay(); break;
+                    case 'SCRATCH': state.isMyTurn = true; updateTurnDisplay(); break;
                     case 'CUE_POSITION':
                         if (!state.isMyTurn && state.cueBall.potted) {
                             state.cueBall.potted = false;
@@ -1050,98 +858,33 @@
                         }
                         break;
                     case 'SYNC':
-                        this.handleSync(data);
+                        if (!state.isDragging && !Physics.anyMoving()) {
+                            data.balls.forEach(ballData => {
+                                const ball = state.balls.find(b => b.id === ballData.id);
+                                if (ball && !ball.moving) {
+                                    const targetPos = new Vector2(ballData.x, ballData.y);
+                                    const diff = targetPos.sub(ball.pos);
+                                    if (diff.length() > 1) ball.pos = ball.pos.add(diff.mul(0.3));
+                                }
+                            });
+                        }
                         break;
-                    case 'PING':
-                        this.send({ type: 'PONG', time: data.time });
-                        break;
+                    case 'PING': this.send({ type: 'PONG', time: data.time }); break;
                     case 'PONG':
-                        const latency = (Date.now() - data.time) / 2;
-                        state.latency = latency;
-                        document.getElementById('latency-display').textContent = `Ping: ${Math.round(latency)}ms`;
+                        state.latency = (Date.now() - data.time) / 2;
+                        document.getElementById('latency-display').textContent = `Ping: ${Math.round(state.latency)}ms`;
                         break;
-                    case 'GAME_OVER':
-                        if (!state.gameEnded) {
-                            endGame(!data.winner, data.reason);
-                        }
-                        break;
+                    case 'GAME_OVER': if (!state.gameEnded) endGame(!data.winner, data.reason); break;
                 }
             },
 
-            handleRemoteShot(data) {
-                // Apply shot with latency compensation
-                const latencyComp = state.latency / 1000; // seconds
-                const compensation = Math.min(latencyComp * 0.5, 0.1); // Cap at 100ms worth
-
-                state.cueBall.vel = new Vector2(data.vx, data.vy);
-                state.cueBall.spin = new Vector2(data.sx || 0, data.sy || 0);
-
-                // Fast-forward simulation for latency compensation
-                const steps = Math.floor(compensation * PHYSICS_FPS);
-                for (let i = 0; i < steps; i++) {
-                    Physics.step(1/PHYSICS_FPS);
-                }
-
-                state.isMyTurn = true;
-                updateTurnDisplay();
-            },
-
-            handleTurnPass(data) {
-                state.isMyTurn = true;
-
-                // Sync to authoritative state
-                if (data.state) {
-                    data.state.forEach(ballData => {
-                        const ball = state.balls.find(b => b.id === ballData.id);
-                        if (ball) ball.deserialize(ballData);
-                    });
-                }
-
-                updateTurnDisplay();
-            },
-
-            handleSync(data) {
-                // Only apply if we're not currently shooting
-                if (!state.isDragging && !Physics.anyMoving()) {
-                    data.balls.forEach(ballData => {
-                        const ball = state.balls.find(b => b.id === ballData.id);
-                        if (ball && !ball.moving) {
-                            // Smooth interpolation to sync state
-                            const targetPos = new Vector2(ballData.x, ballData.y);
-                            const diff = targetPos.sub(ball.pos);
-                            if (diff.length() > 1) {
-                                ball.pos = ball.pos.add(diff.mul(0.3));
-                            }
-                        }
-                    });
-                }
-            },
-
-            send(data) {
-                if (state.conn && state.conn.open) {
-                    state.conn.send({ ...data, seq: ++state.syncSequence });
-                }
-            },
-
-            sendTurnPass() {
-                this.send({
-                    type: 'TURN_PASS',
-                    state: state.balls.map(b => b.serialize()),
-                    timestamp: Date.now()
-                });
-            },
-
+            send(data) { if (state.conn && state.conn.open) state.conn.send({ ...data, seq: ++state.syncSequence }); },
+            sendTurnPass() { this.send({ type: 'TURN_PASS', state: state.balls.map(b => b.serialize()), timestamp: Date.now() }); },
             startPing() {
-                setInterval(() => {
-                    this.send({ type: 'PING', time: Date.now() });
-                }, 2000);
-
+                setInterval(() => this.send({ type: 'PING', time: Date.now() }), 2000);
                 document.getElementById('latency-display').style.display = 'block';
             },
-
-            broadcastWin(reason) {
-                this.send({ type: 'GAME_OVER', winner: true, reason });
-            }
+            broadcastWin(reason) { this.send({ type: 'GAME_OVER', winner: true, reason }); }
         };
 
         // ==========================================
@@ -1151,49 +894,33 @@
             const rect = canvas.getBoundingClientRect();
             const scaleX = TABLE_WIDTH / rect.width;
             const scaleY = TABLE_HEIGHT / rect.height;
-
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-
-            return new Vector2(
-                (clientX - rect.left) * scaleX,
-                (clientY - rect.top) * scaleY
-            );
+            return new Vector2((clientX - rect.left) * scaleX, (clientY - rect.top) * scaleY);
         }
 
         function onPointerDown(e) {
             if (!state.isMyTurn || Physics.anyMoving() || !state.gameActive || state.gameEnded) return;
             if (!state.canShoot) return;
 
-            const pos = getMousePos(e);
-            const dist = pos.dist(state.cueBall.pos);
-
-            // Allow clicking anywhere on table to aim, not just near cue ball
             state.isDragging = true;
-            state.dragStart = pos;
-            state.dragCurrent = pos;
+            state.dragStart = getMousePos(e);
+            state.dragCurrent = state.dragStart;
             document.getElementById('power-meter').style.display = 'block';
             e.preventDefault();
         }
 
         function onPointerMove(e) {
-            // Always track mouse for cue stick display
             state.mousePos = getMousePos(e);
-
             if (!state.isDragging) return;
-
             state.dragCurrent = getMousePos(e);
-
             const dragVector = state.dragStart.sub(state.dragCurrent);
-            const power = Math.min(dragVector.length(), 150);
-
-            document.getElementById('power-fill').style.width = (power / 150 * 100) + '%';
+            document.getElementById('power-fill').style.width = (Math.min(dragVector.length(), 150) / 150 * 100) + '%';
             e.preventDefault();
         }
 
         function onPointerUp(e) {
             if (!state.isDragging) return;
-
             state.isDragging = false;
             document.getElementById('power-meter').style.display = 'none';
             document.getElementById('power-fill').style.width = '0%';
@@ -1202,42 +929,17 @@
             const dist = dragVector.length();
 
             if (dist > 15) {
-                // FIXED: Better power calculation - drag distance directly maps to power
-                // Max drag of 150 pixels = MAX_POWER
-                const power = Math.min(dist / 4, MAX_POWER);  // CHANGED from /6 to /4 for more power
+                const power = Math.min(dist / 4, MAX_POWER);
                 const angle = Math.atan2(dragVector.y, dragVector.x);
-
-                // Calculate spin based on offset from center hit
-                const hitOffset = new Vector2(
-                    Math.sin(angle) * 0,
-                    -Math.cos(angle) * 0
-                );
-
-                shoot(power, angle, hitOffset);
+                shoot(power, angle, new Vector2(0, 0));
             }
         }
 
         function shoot(power, angle, spin) {
             state.canShoot = false;
-
-            // Apply velocity in direction AWAY from drag (slingshot style)
-            state.cueBall.vel = new Vector2(
-                Math.cos(angle) * power,
-                Math.sin(angle) * power
-            );
+            state.cueBall.vel = new Vector2(Math.cos(angle) * power, Math.sin(angle) * power);
             state.cueBall.spin = spin;
-
-            // Send to opponent immediately
-            if (!state.isSolo) {
-                Network.send({
-                    type: 'SHOT',
-                    vx: state.cueBall.vel.x,
-                    vy: state.cueBall.vel.y,
-                    sx: spin.x,
-                    sy: spin.y,
-                    timestamp: Date.now()
-                });
-            }
+            if (!state.isSolo) Network.send({ type: 'SHOT', vx: state.cueBall.vel.x, vy: state.cueBall.vel.y, sx: spin.x, sy: spin.y, timestamp: Date.now() });
         }
 
         // ==========================================
@@ -1246,14 +948,8 @@
         function resize() {
             const container = document.getElementById('canvas-container');
             const aspect = TABLE_WIDTH / TABLE_HEIGHT;
-            let w = container.clientWidth - 40;
-            let h = w / aspect;
-
-            if (h > container.clientHeight - 40) {
-                h = container.clientHeight - 40;
-                w = h * aspect;
-            }
-
+            let w = container.clientWidth - 40, h = w / aspect;
+            if (h > container.clientHeight - 40) { h = container.clientHeight - 40; w = h * aspect; }
             canvas.width = TABLE_WIDTH;
             canvas.height = TABLE_HEIGHT;
             canvas.style.width = w + 'px';
@@ -1261,45 +957,32 @@
         }
 
         function draw() {
-            // Clear with table color
             ctx.fillStyle = '#1b5e20';
             ctx.fillRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
 
-            // Wood border
             ctx.strokeStyle = '#5d4037';
             ctx.lineWidth = 20;
             ctx.strokeRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
 
-            // Inner border highlight
             ctx.strokeStyle = '#795548';
             ctx.lineWidth = 4;
             ctx.strokeRect(10, 10, TABLE_WIDTH - 20, TABLE_HEIGHT - 20);
 
-            // Pockets
             POCKETS.forEach(p => {
-                // Pocket interior
                 ctx.fillStyle = '#0d1117';
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, POCKET_RADIUS, 0, Math.PI * 2);
                 ctx.fill();
-
-                // Pocket rim
                 ctx.strokeStyle = '#3e2723';
                 ctx.lineWidth = 3;
                 ctx.stroke();
             });
 
-            // Draw balls
             state.balls.forEach(ball => ball.draw(ctx));
 
-            // Draw aim line and cue stick when it's your turn and balls are stopped
             if (state.isMyTurn && !Physics.anyMoving() && !state.cueBall.potted) {
-                if (state.isDragging) {
-                    drawAimLine();
-                    drawCueStickWhileDragging();
-                } else {
-                    drawCueStickAtRest();
-                }
+                if (state.isDragging) { drawAimLine(); drawCueStickWhileDragging(); }
+                else drawCueStickAtRest();
             }
         }
 
@@ -1307,8 +990,6 @@
             const dragVector = state.dragStart.sub(state.dragCurrent);
             const angle = Math.atan2(dragVector.y, dragVector.x);
             const power = Math.min(dragVector.length() / 150, 1);
-
-            // Draw line from cue ball in direction of shot
             const startX = state.cueBall.pos.x + Math.cos(angle) * BALL_RADIUS;
             const startY = state.cueBall.pos.y + Math.sin(angle) * BALL_RADIUS;
             const endX = startX + Math.cos(angle) * (100 + power * 200);
@@ -1322,8 +1003,6 @@
             ctx.moveTo(startX, startY);
             ctx.lineTo(endX, endY);
             ctx.stroke();
-
-            // Ghost ball at collision point
             ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
             ctx.beginPath();
             ctx.arc(endX, endY, BALL_RADIUS, 0, Math.PI * 2);
@@ -1335,42 +1014,29 @@
             const dragVector = state.dragStart.sub(state.dragCurrent);
             const angle = Math.atan2(dragVector.y, dragVector.x);
             const power = Math.min(dragVector.length(), 150);
-
-            // Stick pulls back from cue ball based on drag distance
             const stickLength = 200;
-            const pullBack = Math.min(power, 100); // Max pull back
+            const pullBack = Math.min(power, 100);
             const offset = BALL_RADIUS + 20 + pullBack;
-
             const startX = state.cueBall.pos.x - Math.cos(angle) * (stickLength + offset);
             const startY = state.cueBall.pos.y - Math.sin(angle) * (stickLength + offset);
             const endX = state.cueBall.pos.x - Math.cos(angle) * offset;
             const endY = state.cueBall.pos.y - Math.sin(angle) * offset;
-
             drawStick(startX, startY, endX, endY, angle);
         }
 
         function drawCueStickAtRest() {
-            // Draw stick pointing from cue ball toward mouse position
-            const angle = Math.atan2(
-                state.mousePos.y - state.cueBall.pos.y,
-                state.mousePos.x - state.cueBall.pos.x
-            );
-
+            const angle = Math.atan2(state.mousePos.y - state.cueBall.pos.y, state.mousePos.x - state.cueBall.pos.x);
             const stickLength = 200;
             const offset = BALL_RADIUS + 30;
-
             const startX = state.cueBall.pos.x - Math.cos(angle) * (stickLength + offset);
             const startY = state.cueBall.pos.y - Math.sin(angle) * (stickLength + offset);
             const endX = state.cueBall.pos.x - Math.cos(angle) * offset;
             const endY = state.cueBall.pos.y - Math.sin(angle) * offset;
-
             drawStick(startX, startY, endX, endY, angle);
         }
 
         function drawStick(startX, startY, endX, endY, angle) {
             ctx.save();
-
-            // Stick shadow
             ctx.strokeStyle = 'rgba(0,0,0,0.3)';
             ctx.lineWidth = 10;
             ctx.lineCap = 'round';
@@ -1379,12 +1045,10 @@
             ctx.lineTo(endX + 3, endY + 3);
             ctx.stroke();
 
-            // Main stick body (wood color)
             const grad = ctx.createLinearGradient(startX, startY, endX, endY);
             grad.addColorStop(0, '#d4a574');
             grad.addColorStop(0.5, '#e6c295');
             grad.addColorStop(1, '#c49a6c');
-
             ctx.strokeStyle = grad;
             ctx.lineWidth = 8;
             ctx.beginPath();
@@ -1392,7 +1056,6 @@
             ctx.lineTo(endX, endY);
             ctx.stroke();
 
-            // Cue tip (darker)
             ctx.strokeStyle = '#5d4037';
             ctx.lineWidth = 9;
             ctx.beginPath();
@@ -1400,14 +1063,12 @@
             ctx.lineTo(endX, endY);
             ctx.stroke();
 
-            // Tip end
             ctx.strokeStyle = '#3e2723';
             ctx.lineWidth = 10;
             ctx.beginPath();
             ctx.moveTo(endX - Math.cos(angle) * 3, endY - Math.sin(angle) * 3);
             ctx.lineTo(endX, endY);
             ctx.stroke();
-
             ctx.restore();
         }
 
@@ -1416,38 +1077,26 @@
         // ==========================================
         function gameLoop(currentTime) {
             if (!state.gameActive) return;
-
             requestAnimationFrame(gameLoop);
 
-            // Delta time calculation
             if (!state.lastFrameTime) state.lastFrameTime = currentTime;
             const deltaTime = (currentTime - state.lastFrameTime) / 1000;
             state.lastFrameTime = currentTime;
-
-            // Accumulate time for physics
             state.accumulator += deltaTime;
 
-            // Fixed timestep physics
             while (state.accumulator >= 1/PHYSICS_FPS) {
                 Physics.step(1/PHYSICS_FPS);
                 state.accumulator -= 1/PHYSICS_FPS;
             }
 
-            // Check if balls stopped
             if (!Physics.anyMoving() && !state.canShoot) {
                 state.canShoot = true;
                 endTurn();
             }
 
-            // Periodic sync (host only, every 100ms)
-            if (state.isHost && state.gameActive && !Physics.anyMoving()) {
-                if (currentTime - state.lastSyncTime > 100) {
-                    Network.send({
-                        type: 'SYNC',
-                        balls: state.balls.map(b => b.serialize())
-                    });
-                    state.lastSyncTime = currentTime;
-                }
+            if (state.isHost && state.gameActive && !Physics.anyMoving() && currentTime - state.lastSyncTime > 100) {
+                Network.send({ type: 'SYNC', balls: state.balls.map(b => b.serialize()) });
+                state.lastSyncTime = currentTime;
             }
 
             draw();
@@ -1457,18 +1106,9 @@
         // UI UPDATES
         // ==========================================
         function updatePlayerBadges() {
-            const p1 = document.getElementById('p1-badge');
-            const p2 = document.getElementById('p2-badge');
-
-            if (state.isSolo) {
-                p1.className = 'player-badge solid active';
-                p1.textContent = '● Practice';
-                p2.style.display = 'none';
-                return;
-            }
-
+            const p1 = document.getElementById('p1-badge'), p2 = document.getElementById('p2-badge');
+            if (state.isSolo) { p1.className = 'player-badge solid active'; p1.textContent = '● Practice'; p2.style.display = 'none'; return; }
             p2.style.display = 'block';
-
             if (!state.assignedType) {
                 p1.textContent = state.isHost ? '● You (Host)' : '● Opponent';
                 p2.textContent = state.isHost ? '○ Opponent' : '○ You (Guest)';
@@ -1492,23 +1132,10 @@
 
         function updateTurnDisplay() {
             const indicator = document.getElementById('turn-indicator');
-
-            if (!state.gameActive) {
-                indicator.textContent = 'Waiting...';
-                return;
-            }
-
-            if (state.isMyTurn && state.canShoot) {
-                indicator.textContent = '★ YOUR TURN ★';
-                indicator.style.color = '#00ff00';
-            } else if (state.isMyTurn && !state.canShoot) {
-                indicator.textContent = 'Wait for stop...';
-                indicator.style.color = '#ffaa00';
-            } else {
-                indicator.textContent = "OPPONENT'S TURN";
-                indicator.style.color = '#ff6666';
-            }
-
+            if (!state.gameActive) { indicator.textContent = 'Waiting...'; return; }
+            if (state.isMyTurn && state.canShoot) { indicator.textContent = '★ YOUR TURN ★'; indicator.style.color = '#00ff00'; }
+            else if (state.isMyTurn && !state.canShoot) { indicator.textContent = 'Wait for stop...'; indicator.style.color = '#ffaa00'; }
+            else { indicator.textContent = "OPPONENT'S TURN"; indicator.style.color = '#ff6666'; }
             updatePlayerBadges();
         }
 
@@ -1516,26 +1143,14 @@
             if (state.gameEnded) return;
             state.gameEnded = true;
             state.gameActive = false;
-
-            if (!state.isSolo && win) {
-                Network.broadcastWin(reason);
-            }
-
-            const screen = document.getElementById('end-screen');
-            const title = document.getElementById('end-title');
-            const msg = document.getElementById('end-msg');
-
+            if (!state.isSolo && win) Network.broadcastWin(reason);
+            const screen = document.getElementById('end-screen'), title = document.getElementById('end-title'), msg = document.getElementById('end-msg');
             screen.style.display = 'flex';
             title.textContent = win ? '🎉 You Win!' : '😔 You Lose';
             title.style.color = win ? '#238636' : '#da3633';
-
             const myBalls = state.balls.filter(b => b.type === state.myType && !b.potted).length;
             const totalMy = state.balls.filter(b => b.type === state.myType).length;
-
-            msg.innerHTML = `
-                ${reason}<br>
-                <small>Your balls: ${totalMy - myBalls}/${totalMy} pocketed</small>
-            `;
+            msg.innerHTML = `${reason}<br><small>Your balls: ${totalMy - myBalls}/${totalMy} pocketed</small>`;
         }
 
         function showError(msg) {
@@ -1570,12 +1185,14 @@
 
         function connect() {
             const friendId = document.getElementById('join-id').value.trim();
-            if (!friendId || friendId.length !== 4) {
-                showError('Enter valid 4-digit code');
-                return;
-            }
+            if (!friendId || friendId.length !== 4) { showError('Enter valid 4-digit code'); return; }
             Network.connect(friendId);
         }
+
+        // Auto-generate code on load
+        window.addEventListener('load', () => {
+            generateNewCode();
+        });
 
         // Event listeners
         canvas.addEventListener('mousedown', onPointerDown);
@@ -1585,7 +1202,6 @@
         window.addEventListener('mouseup', onPointerUp);
         window.addEventListener('touchend', onPointerUp);
         window.addEventListener('resize', resize);
-        window.addEventListener('load', () => Network.init());
     </script>
 </body>
 </html>
