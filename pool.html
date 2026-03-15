@@ -322,10 +322,10 @@
         const BALL_RADIUS = 11;
         const BALL_DIAMETER = BALL_RADIUS * 2;
         const POCKET_RADIUS = 28;
-        const MAX_POWER = 25;
-        const FRICTION_COEFF = 0.985;
-        const ROLLING_FRICTION = 0.99;
-        const STOP_THRESHOLD = 0.05;
+        const MAX_POWER = 35;  // INCREASED from 25 for stronger shots
+        const FRICTION_COEFF = 0.988;  // INCREASED from 0.985 for less friction
+        const ROLLING_FRICTION = 0.995;  // INCREASED from 0.99
+        const STOP_THRESHOLD = 0.02;  // DECREASED from 0.05 for longer rolling
         const SPIN_DECAY = 0.98;
         const PHYSICS_FPS = 120;
         const PHYSICS_DT = 1000 / PHYSICS_FPS;
@@ -364,6 +364,7 @@
             dragStart: null,
             dragCurrent: null,
             canShoot: true,
+            mousePos: new Vector2(0, 0),  // Track mouse for cue stick
 
             // Networking
             peer: null,
@@ -1167,16 +1168,18 @@
             const pos = getMousePos(e);
             const dist = pos.dist(state.cueBall.pos);
 
-            if (dist < 60) {
-                state.isDragging = true;
-                state.dragStart = pos;
-                state.dragCurrent = pos;
-                document.getElementById('power-meter').style.display = 'block';
-                e.preventDefault();
-            }
+            // Allow clicking anywhere on table to aim, not just near cue ball
+            state.isDragging = true;
+            state.dragStart = pos;
+            state.dragCurrent = pos;
+            document.getElementById('power-meter').style.display = 'block';
+            e.preventDefault();
         }
 
         function onPointerMove(e) {
+            // Always track mouse for cue stick display
+            state.mousePos = getMousePos(e);
+
             if (!state.isDragging) return;
 
             state.dragCurrent = getMousePos(e);
@@ -1199,12 +1202,14 @@
             const dist = dragVector.length();
 
             if (dist > 15) {
-                const power = Math.min(dist / 6, MAX_POWER);
+                // FIXED: Better power calculation - drag distance directly maps to power
+                // Max drag of 150 pixels = MAX_POWER
+                const power = Math.min(dist / 4, MAX_POWER);  // CHANGED from /6 to /4 for more power
                 const angle = Math.atan2(dragVector.y, dragVector.x);
 
                 // Calculate spin based on offset from center hit
                 const hitOffset = new Vector2(
-                    Math.sin(angle) * 0, // Simplified: center hit for now
+                    Math.sin(angle) * 0,
                     -Math.cos(angle) * 0
                 );
 
@@ -1215,6 +1220,7 @@
         function shoot(power, angle, spin) {
             state.canShoot = false;
 
+            // Apply velocity in direction AWAY from drag (slingshot style)
             state.cueBall.vel = new Vector2(
                 Math.cos(angle) * power,
                 Math.sin(angle) * power
@@ -1286,14 +1292,14 @@
             // Draw balls
             state.balls.forEach(ball => ball.draw(ctx));
 
-            // Draw aim line
-            if (state.isMyTurn && !Physics.anyMoving() && !state.cueBall.potted && state.isDragging) {
-                drawAimLine();
-            }
-
-            // Draw cue stick
+            // Draw aim line and cue stick when it's your turn and balls are stopped
             if (state.isMyTurn && !Physics.anyMoving() && !state.cueBall.potted) {
-                drawCueStick();
+                if (state.isDragging) {
+                    drawAimLine();
+                    drawCueStickWhileDragging();
+                } else {
+                    drawCueStickAtRest();
+                }
             }
         }
 
@@ -1302,6 +1308,7 @@
             const angle = Math.atan2(dragVector.y, dragVector.x);
             const power = Math.min(dragVector.length() / 150, 1);
 
+            // Draw line from cue ball in direction of shot
             const startX = state.cueBall.pos.x + Math.cos(angle) * BALL_RADIUS;
             const startY = state.cueBall.pos.y + Math.sin(angle) * BALL_RADIUS;
             const endX = startX + Math.cos(angle) * (100 + power * 200);
@@ -1316,7 +1323,7 @@
             ctx.lineTo(endX, endY);
             ctx.stroke();
 
-            // Ghost ball
+            // Ghost ball at collision point
             ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
             ctx.beginPath();
             ctx.arc(endX, endY, BALL_RADIUS, 0, Math.PI * 2);
@@ -1324,39 +1331,83 @@
             ctx.restore();
         }
 
-        function drawCueStick() {
-            if (state.isDragging) return;
+        function drawCueStickWhileDragging() {
+            const dragVector = state.dragStart.sub(state.dragCurrent);
+            const angle = Math.atan2(dragVector.y, dragVector.x);
+            const power = Math.min(dragVector.length(), 150);
 
-            const mousePos = state.dragCurrent || state.cueBall.pos;
-            const angle = Math.atan2(
-                mousePos.y - state.cueBall.pos.y,
-                mousePos.x - state.cueBall.pos.x
-            );
-
+            // Stick pulls back from cue ball based on drag distance
             const stickLength = 200;
-            const offset = BALL_RADIUS + 20;
+            const pullBack = Math.min(power, 100); // Max pull back
+            const offset = BALL_RADIUS + 20 + pullBack;
 
             const startX = state.cueBall.pos.x - Math.cos(angle) * (stickLength + offset);
             const startY = state.cueBall.pos.y - Math.sin(angle) * (stickLength + offset);
             const endX = state.cueBall.pos.x - Math.cos(angle) * offset;
             const endY = state.cueBall.pos.y - Math.sin(angle) * offset;
 
+            drawStick(startX, startY, endX, endY, angle);
+        }
+
+        function drawCueStickAtRest() {
+            // Draw stick pointing from cue ball toward mouse position
+            const angle = Math.atan2(
+                state.mousePos.y - state.cueBall.pos.y,
+                state.mousePos.x - state.cueBall.pos.x
+            );
+
+            const stickLength = 200;
+            const offset = BALL_RADIUS + 30;
+
+            const startX = state.cueBall.pos.x - Math.cos(angle) * (stickLength + offset);
+            const startY = state.cueBall.pos.y - Math.sin(angle) * (stickLength + offset);
+            const endX = state.cueBall.pos.x - Math.cos(angle) * offset;
+            const endY = state.cueBall.pos.y - Math.sin(angle) * offset;
+
+            drawStick(startX, startY, endX, endY, angle);
+        }
+
+        function drawStick(startX, startY, endX, endY, angle) {
             ctx.save();
-            ctx.strokeStyle = '#d4a574';
-            ctx.lineWidth = 8;
+
+            // Stick shadow
+            ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+            ctx.lineWidth = 10;
             ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(startX + 3, startY + 3);
+            ctx.lineTo(endX + 3, endY + 3);
+            ctx.stroke();
+
+            // Main stick body (wood color)
+            const grad = ctx.createLinearGradient(startX, startY, endX, endY);
+            grad.addColorStop(0, '#d4a574');
+            grad.addColorStop(0.5, '#e6c295');
+            grad.addColorStop(1, '#c49a6c');
+
+            ctx.strokeStyle = grad;
+            ctx.lineWidth = 8;
             ctx.beginPath();
             ctx.moveTo(startX, startY);
             ctx.lineTo(endX, endY);
             ctx.stroke();
 
-            // Cue tip
-            ctx.strokeStyle = '#8b4513';
-            ctx.lineWidth = 10;
+            // Cue tip (darker)
+            ctx.strokeStyle = '#5d4037';
+            ctx.lineWidth = 9;
             ctx.beginPath();
-            ctx.moveTo(endX - Math.cos(angle) * 10, endY - Math.sin(angle) * 10);
+            ctx.moveTo(endX - Math.cos(angle) * 12, endY - Math.sin(angle) * 12);
             ctx.lineTo(endX, endY);
             ctx.stroke();
+
+            // Tip end
+            ctx.strokeStyle = '#3e2723';
+            ctx.lineWidth = 10;
+            ctx.beginPath();
+            ctx.moveTo(endX - Math.cos(angle) * 3, endY - Math.sin(angle) * 3);
+            ctx.lineTo(endX, endY);
+            ctx.stroke();
+
             ctx.restore();
         }
 
@@ -1505,6 +1556,7 @@
             state.lastFrameTime = 0;
             state.accumulator = 0;
             state.canShoot = true;
+            state.mousePos = new Vector2(state.cueBall.pos.x, state.cueBall.pos.y);
             updatePlayerBadges();
             updateTurnDisplay();
             requestAnimationFrame(gameLoop);
