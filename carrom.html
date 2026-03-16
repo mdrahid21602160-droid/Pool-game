@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Carrom Pro - Fixed Physics</title>
+    <title>Carrom Pro - Baseline Rules</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <style>
@@ -294,6 +294,24 @@
             color: white;
         }
         
+        .rules-hint {
+            position: absolute;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: var(--gold);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            z-index: 15;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+        
+        .rules-hint.show { opacity: 1; }
+        
         @media (max-width: 600px) {
             #setup h1 { font-size: 2.5rem; }
             .code-display { font-size: 2rem; padding: 15px; letter-spacing: 5px; }
@@ -333,11 +351,12 @@
             <canvas id="c"></canvas>
             <div id="msg"></div>
             <div id="power-meter"><div id="power-fill"></div></div>
+            <div class="rules-hint" id="rules-hint">Place striker on your baseline</div>
         </div>
     </div>
 
 <script>
-// Game Constants - Tuned for realistic carrom physics
+// Game Constants
 const CONSTANTS = {
     BOARD: 500,
     PIECE_R: 9,
@@ -350,7 +369,9 @@ const CONSTANTS = {
     RESTITUTION: 0.82,
     DENSITY_PIECE: 0.002,
     DENSITY_STRIKER: 0.003,
-    WIN_SCORE: 9
+    WIN_SCORE: 9,
+    BASELINE_Y_WHITE: 430,  // White player baseline (bottom)
+    BASELINE_Y_BLACK: 70    // Black player baseline (top)
 };
 
 // Physics & Engine
@@ -385,7 +406,8 @@ let state = {
     dragPos: null,
     touchId: null,
     syncInterval: null,
-    turnInProgress: false
+    turnInProgress: false,
+    strikerOnBaseline: true  // Track if striker is positioned on baseline
 };
 
 // Initialize PeerJS
@@ -489,6 +511,8 @@ function handleNetworkData(data) {
                 state.currentPlayer = data.currentPlayer;
                 state.isMyTurn = (state.currentPlayer === state.myColor);
                 updateTurnIndicator();
+                // Reset striker to new player's baseline
+                resetStrikerToBaseline();
             }
             break;
             
@@ -515,6 +539,7 @@ function syncGameState(ballsData) {
 
 function applyRemoteShot(force, angle) {
     state.turnInProgress = true;
+    state.strikerOnBaseline = false;
     Body.applyForce(state.striker, state.striker.position, {
         x: Math.cos(angle) * force,
         y: Math.sin(angle) * force
@@ -540,6 +565,7 @@ function startGame() {
     state.currentPlayer = 'white';
     state.scores = { white: 0, black: 0 };
     state.turnInProgress = false;
+    state.strikerOnBaseline = true;
     
     initPhysics();
     updateUI();
@@ -553,7 +579,7 @@ function startGame() {
         }, 50);
     }
     
-    showMessage(state.isMyTurn ? '🎯 Your Turn!' : '⏳ Waiting...');
+    showMessage(state.isMyTurn ? '🎯 Your Turn! Place striker on baseline' : '⏳ Waiting...');
 }
 
 function initPhysics() {
@@ -570,14 +596,12 @@ function initPhysics() {
     
     createBoard();
     createPieces();
-    createStriker();
+    createStrikerOnBaseline();
     setupInputHandlers();
     
-    // Start physics loop
     Matter.Runner.run(state.engine);
     requestAnimationFrame(draw);
     
-    // Check pockets every frame
     setInterval(checkPockets, 16);
 }
 
@@ -592,7 +616,6 @@ function resize() {
 function createBoard() {
     const w = CONSTANTS.BOARD, t = 25;
     
-    // Walls with high restitution for bounce
     World.add(state.world, [
         Bodies.rectangle(w/2, -t/2, w, t, { 
             isStatic: true, 
@@ -622,7 +645,6 @@ function createBoard() {
 }
 
 function createPieces() {
-    // Clear existing pieces
     state.pieces.forEach(p => World.remove(state.world, p));
     if (state.queen) World.remove(state.world, state.queen);
     state.pieces = [];
@@ -644,10 +666,8 @@ function createPieces() {
         return body;
     };
     
-    // Queen in center
     state.queen = createPiece(cx, cy, null, true);
     
-    // Inner circle (6 pieces) - alternating white/black
     for (let i = 0; i < 6; i++) {
         const angle = (i / 6) * Math.PI * 2;
         createPiece(
@@ -657,7 +677,6 @@ function createPieces() {
         );
     }
     
-    // Outer circle (12 pieces) - alternating
     for (let i = 0; i < 12; i++) {
         const angle = (i / 12) * Math.PI * 2 + Math.PI/12;
         createPiece(
@@ -668,23 +687,42 @@ function createPieces() {
     }
 }
 
-function createStriker() {
+// Create striker on the current player's baseline
+function createStrikerOnBaseline() {
     if (state.striker) {
         World.remove(state.world, state.striker);
     }
     
-    const x = CONSTANTS.BOARD/2;
-    const y = (state.currentPlayer === 'white') ? CONSTANTS.BOARD - 70 : 70;
+    const baselineY = (state.currentPlayer === 'white') 
+        ? CONSTANTS.BASELINE_Y_WHITE 
+        : CONSTANTS.BASELINE_Y_BLACK;
     
-    state.striker = Bodies.circle(x, y, CONSTANTS.STRIKER_R, {
+    // Place at center of baseline
+    state.striker = Bodies.circle(CONSTANTS.BOARD/2, baselineY, CONSTANTS.STRIKER_R, {
         restitution: CONSTANTS.RESTITUTION,
         frictionAir: 0.012,
         density: CONSTANTS.DENSITY_STRIKER,
         friction: 0.1,
-        label: 'striker'
+        label: 'striker',
+        isStatic: false
     });
     
     World.add(state.world, state.striker);
+    state.strikerOnBaseline = true;
+}
+
+// Reset striker to baseline for new turn
+function resetStrikerToBaseline() {
+    if (state.striker) {
+        World.remove(state.world, state.striker);
+        state.striker = null;
+    }
+    
+    // Only create striker if it's my turn
+    if (state.isMyTurn) {
+        createStrikerOnBaseline();
+        showMessage("🎯 Your turn! Place striker on baseline");
+    }
 }
 
 function setupInputHandlers() {
@@ -729,6 +767,7 @@ function onDown(e) {
     const p = getPos(e);
     const dist = Math.hypot(p.x - state.striker.position.x, p.y - state.striker.position.y);
     
+    // Only allow dragging if touching the striker
     if (dist < CONSTANTS.TOUCH_AREA) {
         state.isDragging = true;
         state.dragStart = { x: state.striker.position.x, y: state.striker.position.y };
@@ -753,8 +792,16 @@ function onMove(e) {
     
     state.dragPos = getPos(e);
     
+    // Con striker to baseline while dragging
+    const baselineY = (state.currentPlayer === 'white') 
+        ? CONSTANTS.BASELINE_Y_WHITE 
+        : CONSTANTS.BASELINE_Y_BLACK;
+    
+    // Calculate drag position but keep Y on baseline
     const dx = state.dragStart.x - state.dragPos.x;
     const dy = state.dragStart.y - state.dragPos.y;
+    
+    // Only use horizontal component for aiming, but keep striker on baseline
     const power = Math.min(Math.hypot(dx, dy), 180);
     
     document.getElementById('power-fill').style.width = (power / 180 * 100) + '%';
@@ -790,6 +837,7 @@ function onUp(e) {
     });
     
     state.turnInProgress = true;
+    state.strikerOnBaseline = false;
     
     if (state.conn && state.conn.open) {
         state.conn.send({ type: 'SHOOT', force: force, angle: angle });
@@ -806,12 +854,10 @@ function waitForStop() {
     const check = setInterval(() => {
         let moving = false;
         
-        // Check striker
         if (state.striker && (state.striker.speed > 0.02 || state.striker.angularSpeed > 0.01)) {
             moving = true;
         }
         
-        // Check pieces
         for (let p of state.pieces) {
             if (!p.isRemoved && (p.speed > 0.02 || p.angularSpeed > 0.01)) {
                 moving = true;
@@ -821,7 +867,6 @@ function waitForStop() {
         
         checkCount++;
         
-        // Safety timeout after 10 seconds
         if (checkCount > 100) {
             clearInterval(check);
             endTurn();
@@ -851,7 +896,6 @@ function checkPockets() {
         for (let pocket of pockets) {
             const d = Math.hypot(state.striker.position.x - pocket.x, state.striker.position.y - pocket.y);
             if (d < CONSTANTS.POCKET_R - 5) {
-                // Striker fell in pocket
                 state.striker.isRemoved = true;
                 World.remove(state.world, state.striker);
                 state.striker = null;
@@ -871,7 +915,6 @@ function checkPockets() {
                 piece.isRemoved = true;
                 World.remove(state.world, piece);
                 
-                // Visual feedback
                 if (piece.label === 'queen') {
                     showMessage("👑 Queen pocketed!");
                 } else {
@@ -893,9 +936,7 @@ function endTurn() {
     let opponentPiecesCount = 0;
     let queenRemoved = false;
     
-    // Process removed pieces
     removedPieces.forEach(p => {
-        // Remove from array
         state.pieces = state.pieces.filter(x => x !== p);
         
         if (p.label === state.currentPlayer) {
@@ -923,7 +964,6 @@ function endTurn() {
             showMessage("👑 Queen covered! +5");
         } else {
             showMessage("⚠️ Queen not covered!");
-            // Return queen to center
             setTimeout(() => {
                 if (state.gameActive) {
                     state.queen = Bodies.circle(
@@ -963,23 +1003,17 @@ function endTurn() {
     const continueTurn = !foul && myPiecesCount > 0;
     
     setTimeout(() => {
-        if (!state.striker) {
-            createStriker();
-        }
-        
         if (continueTurn) {
-            // Same player continues
+            // Same player continues - reset striker to their baseline
             state.isMyTurn = (state.currentPlayer === state.myColor);
-            showMessage(state.isMyTurn ? "⚡ Continue!" : "⚡ Opponent continues!");
+            resetStrikerToBaseline();
+            showMessage(state.isMyTurn ? "⚡ Continue! Place striker on baseline" : "⚡ Opponent continues!");
         } else {
-            // Switch player
+            // Switch player - reset striker to new player's baseline
             state.currentPlayer = (state.currentPlayer === 'white') ? 'black' : 'white';
             state.isMyTurn = (state.currentPlayer === state.myColor);
-            showMessage(state.isMyTurn ? "🎯 Your turn!" : "🎯 Opponent's turn!");
-        }
-        
-        if (!state.striker) {
-            createStriker();
+            resetStrikerToBaseline();
+            showMessage(state.isMyTurn ? "🎯 Your turn! Place striker on baseline" : "🎯 Opponent's turn!");
         }
         
         updateTurnIndicator();
@@ -1032,7 +1066,7 @@ function showMessage(text) {
     const el = document.getElementById('msg');
     el.textContent = text;
     el.classList.add('show');
-    setTimeout(() => el.classList.remove('show'), 2000);
+    setTimeout(() => el.classList.remove('show'), 2500);
 }
 
 function endGame(win) {
@@ -1064,7 +1098,6 @@ function draw() {
     const s = state.scale;
     const w = state.canvas.width;
     
-    // Clear
     ctx.clearRect(0, 0, w, w);
     
     // Board background
@@ -1074,24 +1107,29 @@ function draw() {
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, w, w);
     
+    // Draw baselines
+    ctx.strokeStyle = 'rgba(255,215,0,0.6)';
+    ctx.lineWidth = 3;
+    
+    // White baseline (bottom)
+    const whiteY = CONSTANTS.BASELINE_Y_WHITE * s;
+    ctx.beginPath();
+    ctx.moveTo(30 * s, whiteY);
+    ctx.lineTo((CONSTANTS.BOARD - 30) * s, whiteY);
+    ctx.stroke();
+    
+    // Black baseline (top)
+    const blackY = CONSTANTS.BASELINE_Y_BLACK * s;
+    ctx.beginPath();
+    ctx.moveTo(30 * s, blackY);
+    ctx.lineTo((CONSTANTS.BOARD - 30) * s, blackY);
+    ctx.stroke();
+    
     // Center circle
     ctx.strokeStyle = 'rgba(255,215,0,0.3)';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(w/2, w/2, 45*s, 0, Math.PI*2);
-    ctx.stroke();
-    
-    // Baselines
-    ctx.strokeStyle = 'rgba(255,215,0,0.4)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(w/2 - 40*s, 70*s);
-    ctx.lineTo(w/2 + 40*s, 70*s);
-    ctx.stroke();
-    
-    ctx.beginPath();
-    ctx.moveTo(w/2 - 40*s, (CONSTANTS.BOARD-70)*s);
-    ctx.lineTo(w/2 + 40*s, (CONSTANTS.BOARD-70)*s);
     ctx.stroke();
     
     // Draw all bodies
@@ -1125,9 +1163,9 @@ function draw() {
             ctx.lineWidth = 1;
             ctx.stroke();
             
-            // Touch area indicator
-            if (state.isMyTurn && !state.isDragging && !state.turnInProgress) {
-                ctx.strokeStyle = 'rgba(0,255,0,0.3)';
+            // Touch area indicator when on baseline
+            if (state.isMyTurn && !state.isDragging && !state.turnInProgress && state.strikerOnBaseline) {
+                ctx.strokeStyle = 'rgba(0,255,0,0.4)';
                 ctx.lineWidth = 2;
                 ctx.setLineDash([5, 5]);
                 ctx.beginPath();
@@ -1197,7 +1235,6 @@ function draw() {
 
 window.onload = initPeer;
 
-// Prevent zoom on double tap
 let lastTouchEnd = 0;
 document.addEventListener('touchend', (e) => {
     const now = Date.now();
