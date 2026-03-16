@@ -6,184 +6,30 @@
     <title>Pro Pool P2P</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        :root {
-            --gold: #eec27e;
-            --dark: #0d1117;
-            --card: #161b22;
-            --felt: #1a4d2e;
-            --felt-dark: #0f2e1b;
-        }
+        :root { --gold: #eec27e; --dark: #0d1117; --card: #161b22; --felt: #1a4d2e; --felt-dark: #0f2e1b; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            background: var(--dark);
-            color: #c9d1d9;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            overflow: hidden;
-            touch-action: none;
-            user-select: none;
-        }
-        #setup {
-            position: fixed;
-            inset: 0;
-            background: rgba(13, 17, 23, 0.98);
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-        .code-display {
-            font-family: 'SF Mono', monospace;
-            background: #000;
-            color: var(--gold);
-            padding: 20px 40px;
-            border-radius: 12px;
-            letter-spacing: 8px;
-            font-size: 2.2rem;
-            border: 2px solid var(--gold);
-            margin: 20px 0;
-            font-weight: bold;
-        }
-        .spinner {
-            display: inline-block;
-            width: 40px;
-            height: 40px;
-            border: 4px solid rgba(238, 194, 126, 0.2);
-            border-radius: 50%;
-            border-top-color: var(--gold);
-            animation: spin 1s linear infinite;
-        }
+        body { background: var(--dark); color: #c9d1d9; font-family: system-ui, sans-serif; overflow: hidden; touch-action: none; user-select: none; }
+        #setup { position: fixed; inset: 0; background: rgba(13,17,23,0.98); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .code-display { font-family: monospace; background: #000; color: var(--gold); padding: 20px 40px; border-radius: 12px; letter-spacing: 8px; font-size: 2.2rem; border: 2px solid var(--gold); margin: 20px 0; }
+        .spinner { display: inline-block; width: 40px; height: 40px; border: 4px solid rgba(238,194,126,0.2); border-radius: 50%; border-top-color: var(--gold); animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .btn {
-            background: var(--gold);
-            color: #3e2e14;
-            padding: 15px 30px;
-            border: none;
-            border-radius: 10px;
-            font-weight: bold;
-            cursor: pointer;
-            font-size: 1rem;
-            transition: all 0.2s;
-        }
-        .btn:hover:not(:disabled) { transform: translateY(-2px); }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-secondary {
-            background: transparent;
-            color: #8b949e;
-            border: 1px solid #30363d;
-            margin-top: 15px;
-        }
-        input {
-            padding: 15px;
-            text-align: center;
-            border-radius: 10px;
-            background: #111;
-            color: white;
-            border: 1px solid var(--gold);
-            font-size: 1.2rem;
-            width: 200px;
-        }
-        #game-ui {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            background: var(--card);
-            padding: 15px 20px;
-            border-bottom: 2px solid var(--gold);
-            display: none;
-            justify-content: space-between;
-            align-items: center;
-            z-index: 10;
-        }
-        .player-badge {
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-weight: 600;
-            font-size: 0.9rem;
-        }
-        .player-badge.active {
-            box-shadow: 0 0 20px var(--gold);
-            border: 2px solid var(--gold);
-            transform: scale(1.05);
-        }
+        .btn { background: var(--gold); color: #3e2e14; padding: 15px 30px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 1rem; }
+        .btn:disabled { opacity: 0.5; }
+        .btn-secondary { background: transparent; color: #8b949e; border: 1px solid #30363d; margin-top: 15px; }
+        input { padding: 15px; text-align: center; border-radius: 10px; background: #111; color: white; border: 1px solid var(--gold); font-size: 1.2rem; width: 200px; }
+        #game-ui { position: fixed; top: 0; left: 0; right: 0; background: var(--card); padding: 15px 20px; border-bottom: 2px solid var(--gold); display: none; justify-content: space-between; align-items: center; z-index: 10; }
+        .player-badge { padding: 8px 16px; border-radius: 20px; font-weight: 600; font-size: 0.9rem; }
+        .player-badge.active { box-shadow: 0 0 20px var(--gold); border: 2px solid var(--gold); }
         .solid { background: #d32f2f; color: white; }
         .stripe { background: #ffeb3b; color: #333; }
-        #turn-indicator {
-            font-weight: 700;
-            color: var(--gold);
-            font-size: 1.1rem;
-            text-transform: uppercase;
-        }
-        #canvas-container {
-            position: fixed;
-            top: 70px;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            background: radial-gradient(circle at center, var(--felt) 0%, var(--felt-dark) 100%);
-        }
-        canvas {
-            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
-            border-radius: 8px;
-            cursor: crosshair;
-            touch-action: none;
-        }
-        #power-meter {
-            position: fixed;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 200px;
-            height: 12px;
-            background: rgba(0,0,0,0.6);
-            border-radius: 20px;
-            overflow: hidden;
-            border: 2px solid var(--gold);
-            z-index: 20;
-            display: none;
-        }
-        #power-fill {
-            height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg, #4caf50, #ffff00, #ff0000);
-        }
-        #end-screen {
-            position: fixed;
-            inset: 0;
-            background: rgba(13, 17, 23, 0.95);
-            z-index: 100;
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        .error-toast {
-            position: fixed;
-            top: 80px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #da3633;
-            color: white;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-weight: 600;
-            z-index: 200;
-            display: none;
-        }
-        .copy-btn {
-            background: transparent;
-            border: 1px solid var(--gold);
-            color: var(--gold);
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            margin-top: 10px;
-        }
+        #turn-indicator { font-weight: 700; color: var(--gold); font-size: 1.1rem; }
+        #canvas-container { position: fixed; top: 70px; left: 0; right: 0; bottom: 0; display: none; align-items: center; justify-content: center; background: radial-gradient(circle at center, var(--felt) 0%, var(--felt-dark) 100%); }
+        canvas { box-shadow: 0 20px 60px rgba(0,0,0,0.8); border-radius: 8px; cursor: crosshair; touch-action: none; }
+        #power-meter { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); width: 200px; height: 12px; background: rgba(0,0,0,0.6); border-radius: 20px; overflow: hidden; border: 2px solid var(--gold); z-index: 20; display: none; }
+        #power-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #4caf50, #ffff00, #ff0000); }
+        #end-screen { position: fixed; inset: 0; background: rgba(13,17,23,0.95); z-index: 100; display: none; flex-direction: column; align-items: center; justify-content: center; }
+        .error-toast { position: fixed; top: 80px; left: 50%; transform: translateX(-50%); background: #da3633; color: white; padding: 12px 24px; border-radius: 8px; font-weight: 600; z-index: 200; display: none; }
+        .copy-btn { background: transparent; border: 1px solid var(--gold); color: var(--gold); padding: 8px 16px; border-radius: 6px; cursor: pointer; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -237,26 +83,15 @@
         // STATE
         // ==========================================
         const state = {
-            balls: [],
-            cueBall: null,
-            eightBall: null,
-            isMyTurn: false,
-            isHost: false,
-            isSolo: false,
-            myType: null,
-            opponentType: null,
-            assignedType: false,
-            gameActive: false,
-            gameEnded: false,
-            isDragging: false,
-            dragStart: null,
-            dragCurrent: null,
-            canShoot: true,
-            mousePos: {x: 400, y: 200},
-            peer: null,
-            conn: null,
-            myId: null,
-            ballsPottedThisTurn: []
+            balls: [], cueBall: null, eightBall: null,
+            isMyTurn: false, isHost: false, isSolo: false,
+            myType: null, opponentType: null, assignedType: false,
+            gameActive: false, gameEnded: false,
+            isDragging: false, dragStart: null, dragCurrent: null,
+            canShoot: true, mousePos: {x: 400, y: 200},
+            peer: null, conn: null, myId: null,
+            ballsPottedThisTurn: [],
+            scratchInProgress: false // NEW: Prevent double scratch handling
         };
 
         const canvas = document.getElementById('table');
@@ -267,26 +102,17 @@
         // ==========================================
         class Ball {
             constructor(x, y, color, type, num) {
-                this.x = x;
-                this.y = y;
-                this.vx = 0;
-                this.vy = 0;
-                this.color = color;
-                this.type = type;
-                this.number = num;
+                this.x = x; this.y = y;
+                this.vx = 0; this.vy = 0;
+                this.color = color; this.type = type; this.number = num;
                 this.radius = BALL_RADIUS;
                 this.potted = false;
                 this.id = num;
                 this.wasPotted = false;
             }
 
-            get speed() {
-                return Math.hypot(this.vx, this.vy);
-            }
-
-            get moving() {
-                return this.speed > STOP_THRESHOLD;
-            }
+            get speed() { return Math.hypot(this.vx, this.vy); }
+            get moving() { return this.speed > STOP_THRESHOLD; }
 
             update() {
                 if (this.potted) return;
@@ -302,22 +128,10 @@
                 }
 
                 const r = this.radius;
-                if (this.x < r) {
-                    this.x = r;
-                    this.vx = Math.abs(this.vx) * WALL_BOUNCE;
-                }
-                if (this.x > TABLE_WIDTH - r) {
-                    this.x = TABLE_WIDTH - r;
-                    this.vx = -Math.abs(this.vx) * WALL_BOUNCE;
-                }
-                if (this.y < r) {
-                    this.y = r;
-                    this.vy = Math.abs(this.vy) * WALL_BOUNCE;
-                }
-                if (this.y > TABLE_HEIGHT - r) {
-                    this.y = TABLE_HEIGHT - r;
-                    this.vy = -Math.abs(this.vy) * WALL_BOUNCE;
-                }
+                if (this.x < r) { this.x = r; this.vx = Math.abs(this.vx) * WALL_BOUNCE; }
+                if (this.x > TABLE_WIDTH - r) { this.x = TABLE_WIDTH - r; this.vx = -Math.abs(this.vx) * WALL_BOUNCE; }
+                if (this.y < r) { this.y = r; this.vy = Math.abs(this.vy) * WALL_BOUNCE; }
+                if (this.y > TABLE_HEIGHT - r) { this.y = TABLE_HEIGHT - r; this.vy = -Math.abs(this.vy) * WALL_BOUNCE; }
             }
 
             resolve(other) {
@@ -325,7 +139,6 @@
                 const dy = other.y - this.y;
                 const dist = Math.hypot(dx, dy);
                 const minDist = this.radius + other.radius;
-
                 if (dist >= minDist || dist === 0) return false;
 
                 const overlap = minDist - dist;
@@ -358,8 +171,7 @@
                 ctx.arc(this.x + 2, this.y + 2, this.radius, 0, Math.PI * 2);
                 ctx.fill();
 
-                ctx.fillStyle = this.type === 'cue' ? '#ffffff' : 
-                               this.type === 'eight' ? '#222222' : this.color;
+                ctx.fillStyle = this.type === 'cue' ? '#ffffff' : this.type === 'eight' ? '#222222' : this.color;
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
                 ctx.fill();
@@ -391,8 +203,7 @@
             state.cueBall = new Ball(150, TABLE_HEIGHT / 2, 'white', 'cue', 0);
             state.balls.push(state.cueBall);
 
-            const startX = 600;
-            const startY = TABLE_HEIGHT / 2;
+            const startX = 600, startY = TABLE_HEIGHT / 2;
             const spacing = BALL_RADIUS * 1.732;
             const colors = ['#ff4444', '#ff8800', '#ffdd00', '#44ff44', '#4444ff', '#8844ff', '#ff44ff', '#8B4513'];
             
@@ -401,7 +212,6 @@
                 for (let col = 0; col <= row; col++) {
                     const x = startX + row * spacing;
                     const y = startY + (col - row / 2) * BALL_RADIUS * 2;
-
                     if (row === 2 && col === 1) {
                         state.eightBall = new Ball(x, y, 'black', 'eight', 8);
                         state.balls.push(state.eightBall);
@@ -418,6 +228,7 @@
 
             state.ballsPottedThisTurn = [];
             state.balls.forEach(b => b.wasPotted = false);
+            state.scratchInProgress = false;
         }
 
         function updatePhysics() {
@@ -430,8 +241,7 @@
             for (let pass = 0; pass < 2; pass++) {
                 for (let i = 0; i < state.balls.length; i++) {
                     for (let j = i + 1; j < state.balls.length; j++) {
-                        const b1 = state.balls[i];
-                        const b2 = state.balls[j];
+                        const b1 = state.balls[i], b2 = state.balls[j];
                         if (!b1.potted && !b2.potted) b1.resolve(b2);
                     }
                 }
@@ -442,8 +252,7 @@
                 for (let p of POCKETS) {
                     if (Math.hypot(b.x - p[0], b.y - p[1]) < POCKET_RADIUS - 5) {
                         b.potted = true;
-                        b.vx = 0;
-                        b.vy = 0;
+                        b.vx = 0; b.vy = 0;
                         state.ballsPottedThisTurn.push(b);
                         handlePotted(b);
                         break;
@@ -456,34 +265,71 @@
             return state.balls.some(b => !b.potted && b.moving);
         }
 
+        // ==========================================
+        // FIXED: SCRATCH HANDLING WITH PROPER SYNC
+        // ==========================================
         function handlePotted(ball) {
-            if (ball.type === 'cue') {
-                showError('Scratch!');
-                setTimeout(() => {
-                    ball.potted = false;
-                    ball.x = 150;
-                    ball.y = TABLE_HEIGHT / 2;
-                    ball.vx = 0;
-                    ball.vy = 0;
-                }, 500);
-            } else if (!state.assignedType && !state.isSolo && ball.type !== 'eight') {
-                if (state.isMyTurn) {
-                    state.myType = ball.type;
-                    state.opponentType = ball.type === 'solid' ? 'stripe' : 'solid';
-                } else {
-                    state.opponentType = ball.type;
-                    state.myType = ball.type === 'solid' ? 'stripe' : 'solid';
+            if (ball.type !== 'cue') {
+                // Handle object balls
+                if (!state.assignedType && !state.isSolo && ball.type !== 'eight') {
+                    if (state.isMyTurn) {
+                        state.myType = ball.type;
+                        state.opponentType = ball.type === 'solid' ? 'stripe' : 'solid';
+                    } else {
+                        state.opponentType = ball.type;
+                        state.myType = ball.type === 'solid' ? 'stripe' : 'solid';
+                    }
+                    state.assignedType = true;
+                } else if (ball.type === 'eight') {
+                    const remaining = state.balls.filter(b => 
+                        b.type === state.myType && !b.potted && b !== ball
+                    ).length;
+                    endGame(remaining === 0, remaining === 0 ? '8-ball sunk!' : 'Too early!');
                 }
-                state.assignedType = true;
-            } else if (ball.type === 'eight') {
-                const remaining = state.balls.filter(b => 
-                    b.type === state.myType && !b.potted && b !== ball
-                ).length;
-                endGame(remaining === 0, remaining === 0 ? '8-ball sunk!' : 'Too early!');
+                return;
             }
+
+            // CUE BALL SCRATCH - FIXED
+            if (state.scratchInProgress) return; // Prevent double handling
+            state.scratchInProgress = true;
+
+            showError('Scratch! Cue ball respawned.');
+            
+            // Determine respawn position (kitchen area - left side)
+            const respawnX = 150;
+            const respawnY = TABLE_HEIGHT / 2;
+
+            // Respawn immediately on local
+            ball.potted = false;
+            ball.x = respawnX;
+            ball.y = respawnY;
+            ball.vx = 0;
+            ball.vy = 0;
+            ball.wasPotted = false;
+
+            console.log(`Scratch handled. Cue ball respawned at (${respawnX}, ${respawnY})`);
+
+            // CRITICAL: Send respawn to opponent immediately
+            if (!state.isSolo && state.conn && state.conn.open) {
+                state.conn.send({
+                    type: 'CUE_RESPAWN',  // NEW: Dedicated message type
+                    x: respawnX,
+                    y: respawnY,
+                    scratch: true,
+                    nextTurn: !state.isMyTurn  // Who plays next
+                });
+                console.log('Sent CUE_RESPAWN to opponent');
+            }
+
+            // Reset flag after short delay
+            setTimeout(() => {
+                state.scratchInProgress = false;
+            }, 100);
         }
 
         function endTurn() {
+            console.log("=== END TURN ===");
+            
             if (state.isSolo) {
                 state.isMyTurn = true;
                 state.ballsPottedThisTurn = [];
@@ -500,6 +346,7 @@
 
             if (scratch) {
                 continueTurn = false;
+                console.log("Scratch detected in endTurn - turn passes");
             } else if (eightPotted) {
                 continueTurn = false;
             } else if (theirPotted > 0 && myPotted === 0) {
@@ -516,12 +363,8 @@
                     state.conn.send({
                         type: 'TURN_PASS',
                         balls: state.balls.map(b => ({
-                            id: b.id,
-                            x: b.x,
-                            y: b.y,
-                            vx: b.vx,
-                            vy: b.vy,
-                            potted: b.potted
+                            id: b.id, x: b.x, y: b.y, 
+                            vx: b.vx, vy: b.vy, potted: b.potted
                         }))
                     });
                 }
@@ -533,21 +376,16 @@
         }
 
         // ==========================================
-        // NETWORKING
+        // NETWORKING - FIXED WITH CUE_RESPAWN HANDLER
         // ==========================================
         function initPeer() {
             const randomId = Math.floor(1000 + Math.random() * 9000).toString();
             state.peer = new Peer(randomId, {
-                config: {
-                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-                }
+                config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
             });
             
             setTimeout(() => {
-                if (!state.myId) {
-                    document.getElementById('my-id').innerHTML = 
-                        '<span style="color:#ff6666">Timeout</span>';
-                }
+                if (!state.myId) document.getElementById('my-id').innerHTML = '<span style="color:#ff6666">Timeout</span>';
             }, 15000);
 
             state.peer.on('open', id => {
@@ -575,15 +413,17 @@
             state.isHost = false;
             state.myType = 'stripe';
             const conn = state.peer.connect(id, { reliable: true });
-            document.getElementById('my-id').innerHTML = 
-                '<span class="spinner"></span> Connecting...';
+            document.getElementById('my-id').innerHTML = '<span class="spinner"></span> Connecting...';
             setupConn(conn);
         }
 
         function setupConn(conn) {
             state.conn = conn;
             conn.on('open', () => { if (!state.isHost) startGame(); });
+            
             conn.on('data', data => {
+                console.log("Received:", data.type, data);
+                
                 if (data.type === 'TURN_PASS') {
                     state.isMyTurn = true;
                     state.canShoot = true;
@@ -591,19 +431,41 @@
                         data.balls.forEach(s => {
                             const b = state.balls.find(x => x.id === s.id);
                             if (b) {
-                                b.x = s.x;
-                                b.y = s.y;
-                                b.vx = s.vx;
-                                b.vy = s.vy;
+                                b.x = s.x; b.y = s.y; 
+                                b.vx = s.vx; b.vy = s.vy; 
                                 b.potted = s.potted;
                             }
                         });
                     }
                     updateUI();
+                    
                 } else if (data.type === 'SHOT' && state.cueBall) {
                     state.cueBall.vx = data.vx;
                     state.cueBall.vy = data.vy;
                     state.isMyTurn = false;
+                    updateUI();
+                    
+                } else if (data.type === 'CUE_RESPAWN') {
+                    // FIXED: Handle opponent's scratch
+                    console.log('Received CUE_RESPAWN:', data);
+                    
+                    if (state.cueBall) {
+                        state.cueBall.potted = false;
+                        state.cueBall.x = data.x;
+                        state.cueBall.y = data.y;
+                        state.cueBall.vx = 0;
+                        state.cueBall.vy = 0;
+                        state.cueBall.wasPotted = false;
+                        
+                        console.log(`Opponent scratched, cue ball respawned at (${data.x}, ${data.y})`);
+                        
+                        // If nextTurn is true, it's our turn now
+                        if (data.nextTurn === true) {
+                            state.isMyTurn = true;
+                            state.canShoot = true;
+                            showError('Opponent scratched! Your turn.');
+                        }
+                    }
                     updateUI();
                 }
             });
@@ -706,10 +568,7 @@
             const aspect = TABLE_WIDTH / TABLE_HEIGHT;
             let w = container.clientWidth - 40;
             let h = w / aspect;
-            if (h > container.clientHeight - 40) {
-                h = container.clientHeight - 40;
-                w = h * aspect;
-            }
+            if (h > container.clientHeight - 40) { h = container.clientHeight - 40; w = h * aspect; }
             canvas.width = TABLE_WIDTH;
             canvas.height = TABLE_HEIGHT;
             canvas.style.width = w + 'px';
@@ -733,7 +592,8 @@
 
             for (let b of state.balls) b.draw(ctx);
 
-            if (state.isMyTurn && !anyMoving() && !state.cueBall.potted) {
+            // Draw cue stick when my turn and cue ball exists and not moving
+            if (state.isMyTurn && !anyMoving() && state.cueBall && !state.cueBall.potted) {
                 drawCueStick();
             }
         }
@@ -845,7 +705,7 @@
             const el = document.getElementById('error');
             el.textContent = msg;
             el.style.display = 'block';
-            setTimeout(() => el.style.display = 'none', 2000);
+            setTimeout(() => el.style.display = 'none', 3000);
         }
 
         function startGame() {
