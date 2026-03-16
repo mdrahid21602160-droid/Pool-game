@@ -499,11 +499,9 @@
         }
 
         // ==========================================
-        // FIXED END TURN - NOW PROPERLY SWITCHES TURNS
+        // FIXED END TURN - CRITICAL FIX HERE
         // ==========================================
         function endTurn() {
-            console.log("=== END TURN === Current player:", state.currentPlayer, "My color:", state.myColor);
-            
             let myPieces = 0, opponentPieces = 0, queenPocketed = false, strikerPocketed = !state.striker;
 
             for (let b of state.lastPocketed) {
@@ -523,34 +521,25 @@
 
             const foul = strikerPocketed || opponentPieces > 0;
             const continueTurn = !foul && myPieces > 0 && !queenPocketed;
-            
-            console.log("Foul:", foul, "Continue:", continueTurn, "My pieces:", myPieces);
 
-            // Determine next player
-            let nextPlayer;
-            if (continueTurn) {
-                nextPlayer = state.currentPlayer; // Same player continues
-            } else {
-                nextPlayer = state.currentPlayer === 'white' ? 'black' : 'white'; // Switch
+            // Switch player if not continuing
+            if (!continueTurn) {
+                state.currentPlayer = state.currentPlayer === 'white' ? 'black' : 'white';
             }
             
-            state.currentPlayer = nextPlayer;
+            // CRITICAL FIX: Update isMyTurn based on whether it's my color's turn
+            state.isMyTurn = (state.myColor === state.currentPlayer);
+            
             state.turnInProgress = false;
             resetStriker();
             state.lastPocketed = [];
 
-            // CRITICAL FIX: Update isMyTurn based on whether it's my color's turn
-            state.isMyTurn = (state.myColor === state.currentPlayer);
-            
-            console.log("Next player:", nextPlayer, "Is my turn:", state.isMyTurn);
-
-            // Send to opponent if multiplayer
+            // Send to opponent
             if (!state.isSolo && state.conn && state.conn.open) {
                 state.conn.send({
                     type: 'TURN_PASS',
                     scores: state.scores,
                     currentPlayer: state.currentPlayer,
-                    nextPlayer: nextPlayer,
                     continueTurn: continueTurn
                 });
             }
@@ -559,7 +548,7 @@
         }
 
         // ==========================================
-        // NETWORKING - FIXED WITH PROPER TURN HANDLING
+        // NETWORKING
         // ==========================================
         function initPeer() {
             const randomId = Math.floor(1000 + Math.random() * 9000).toString();
@@ -585,8 +574,6 @@
                 console.error('PeerJS Error:', err);
                 if (err.type === 'unavailable-id') {
                     initPeer();
-                } else if (err.type === 'network') {
-                    document.getElementById('my-id').innerHTML = '<span style="color:#ff6666">Network Error. Check connection.</span>';
                 } else {
                     document.getElementById('my-id').innerHTML = `<span style="color:#ff6666">Error: ${err.type}</span>`;
                 }
@@ -619,25 +606,21 @@
             });
 
             conn.on('data', data => {
-                console.log("Received:", data.type, data);
-                
                 if (data.type === 'TURN_PASS') {
                     state.scores = data.scores;
                     state.currentPlayer = data.currentPlayer;
                     state.turnInProgress = false;
                     
-                    // CRITICAL FIX: Properly set isMyTurn based on my color vs current player
+                    // CRITICAL FIX: Update isMyTurn when receiving turn pass
                     state.isMyTurn = (state.myColor === data.currentPlayer);
                     
                     resetStriker();
                     updateUI();
-                    
                 } else if (data.type === 'SHOT' && state.striker) {
                     state.striker.vel = new Vector2(data.vx, data.vy);
                     state.turnInProgress = true;
-                    state.isMyTurn = false; // Opponent just shot, so it's not my turn
+                    state.isMyTurn = false;
                     updateUI();
-                    
                 } else if (data.type === 'STRIKER_POS' && state.striker) {
                     placeStriker(data.x);
                 }
@@ -645,14 +628,7 @@
 
             conn.on('error', err => {
                 console.error('Connection error:', err);
-                showError('Connection lost. Refresh to reconnect.');
-            });
-
-            conn.on('close', () => {
-                if (state.gameActive && !state.gameEnded) {
-                    showError('Opponent disconnected.');
-                    state.gameActive = false;
-                }
+                showError('Connection lost.');
             });
         }
 
@@ -840,17 +816,17 @@
                 p1.textContent = '⚪ Practice';
                 p2.style.display = 'none';
             } else {
-                // FIXED: Properly show which color you are
+                // Show which color each player is
                 const isWhite = state.myColor === 'white';
                 p1.textContent = isWhite ? '⚪ You' : '⚪ Opp';
                 p2.textContent = isWhite ? '⚫ Opp' : '⚫ You';
                 
-                // FIXED: Active badge shows whose turn it currently is
+                // Active badge shows whose turn it actually is
                 p1.className = 'player-badge white' + (state.currentPlayer === 'white' ? ' active' : '');
                 p2.className = 'player-badge black' + (state.currentPlayer === 'black' ? ' active' : '');
             }
 
-            // FIXED: Turn indicator shows if it's MY turn
+            // Turn indicator shows if it's MY turn
             if (state.isMyTurn) {
                 turn.textContent = state.canShoot ? '★ YOUR TURN ★' : 'Moving...';
                 turn.style.color = state.canShoot ? '#00ff00' : '#ffaa00';
@@ -868,9 +844,7 @@
             initBoard();
             state.gameActive = true;
             state.canShoot = true;
-            // FIXED: Host (white) starts first
             state.isMyTurn = state.isHost || state.isSolo;
-            console.log("Game started. Is host:", state.isHost, "My color:", state.myColor, "Is my turn:", state.isMyTurn);
             updateUI();
             loop();
         }
