@@ -1,1 +1,850 @@
-<!DOCTYPE html> <html lang="en"> <head> <meta charset="UTF-8"> <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"> <title>Carrom Pro</title> <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script> <style> :root { --gold: #eec27e; --dark: #0d1117; --card: #161b22; --felt: #1a4d2e; --felt-dark: #0f2e1b; } * { margin: 0; padding: 0; box-sizing: border-box; } body { background: var(--dark); color: #c9d1d9; font-family: system-ui, sans-serif; overflow: hidden; touch-action: none; user-select: none; } #setup { position: fixed; inset: 0; background: rgba(13,17,23,0.98); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; } .code-display { font-family: monospace; background: #000; color: var(--gold); padding: 20px 40px; border-radius: 12px; letter-spacing: 8px; font-size: 2.2rem; border: 2px solid var(--gold); margin: 20px 0; } .spinner { display: inline-block; width: 40px; height: 40px; border: 4px solid rgba(238,194,126,0.2); border-radius: 50%; border-top-color: var(--gold); animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } } .btn { background: var(--gold); color: #3e2e14; padding: 15px 30px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 1rem; } .btn:disabled { opacity: 0.5; } .btn-secondary { background: transparent; color: #8b949e; border: 1px solid #30363d; margin-top: 15px; } input { padding: 15px; text-align: center; border-radius: 10px; background: #111; color: white; border: 1px solid var(--gold); font-size: 1.2rem; width: 200px; } #game-ui { position: fixed; top: 0; left: 0; right: 0; background: var(--card); padding: 15px 20px; border-bottom: 2px solid var(--gold); display: none; justify-content: space-between; align-items: center; z-index: 10; } .player-badge { padding: 8px 16px; border-radius: 20px; font-weight: 600; font-size: 0.9rem; } .player-badge.active { box-shadow: 0 0 20px var(--gold); border: 2px solid var(--gold); } .white { background: #fff; color: #000; } .black { background: #333; color: #fff; border: 1px solid #555; } #turn-indicator { font-weight: 700; color: var(--gold); font-size: 1.1rem; } #canvas-container { position: fixed; top: 70px; left: 0; right: 0; bottom: 0; display: none; align-items: center; justify-content: center; background: radial-gradient(circle at center, var(--felt) 0%, var(--felt-dark) 100%); } canvas { box-shadow: 0 20px 60px rgba(0,0,0,0.8); border-radius: 8px; cursor: crosshair; touch-action: none; } #power-meter { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); width: 200px; height: 12px; background: rgba(0,0,0,0.6); border-radius: 20px; overflow: hidden; border: 2px solid var(--gold); z-index: 20; display: none; } #power-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #4caf50, #ffff00, #ff0000); } #end-screen { position: fixed; inset: 0; background: rgba(13,17,23,0.95); z-index: 100; display: none; flex-direction: column; align-items: center; justify-content: center; } .copy-btn { background: transparent; border: 1px solid var(--gold); color: var(--gold); padding: 8px 16px; border-radius: 6px; cursor: pointer; margin-top: 10px; } </style> <base target="_blank"> </head> <body> <div id="setup"> <h1 style="color: var(--gold); font-size: 2.5rem; margin-bottom: 10px;">🎯 Carrom</h1> <div id="my-id"><span class="spinner"></span> Connecting...</div> <div style="margin-top: 20px;"> <input type="text" id="join-id" placeholder="Enter Code" disabled> <button class="btn" id="join-btn" onclick="connect()" disabled style="margin-left: 10px;">JOIN</button> </div> <button class="btn btn-secondary" onclick="startSolo()">Practice Solo</button> </div> <div id="game-ui"> <div class="player-badge white" id="p1-badge">⚪ P1</div> <div id="turn-indicator">Wait</div> <div class="player-badge black" id="p2-badge">⚫ P2</div> </div> <div id="canvas-container"> <canvas id="table"></canvas> </div> <div id="power-meter"><div id="power-fill"></div></div> <div id="end-screen"> <h1 id="end-title" style="font-size: 3rem; color: var(--gold);">Game Over</h1> <div id="end-msg" style="color: #8b949e; margin: 20px;"></div> <button class="btn" onclick="location.reload()">Play Again</button> </div> <script> // ========================================== // CONSTANTS - EXACT SAME STRUCTURE AS POOL // ========================================== const BOARD_SIZE = 500; const PIECE_RADIUS = 9; const QUEEN_RADIUS = 9.5; const STRIKER_RADIUS = 14; const POCKET_RADIUS = 22; const MAX_POWER = 15; const FRICTION = 0.985; const STOP_THRESHOLD = 0.05; const WALL_BOUNCE = 0.7; const BALL_BOUNCE = 0.85; const WIN_SCORE = 9; const POCKETS = [[30,30], [470,30], [30,470], [470,470]]; const BASELINE_Y_WHITE = 430; const BASELINE_Y_BLACK = 70; // ========================================== // STATE - EXACT SAME PATTERN AS POOL // ========================================== const state = { pieces: [], striker: null, isMyTurn: false, isHost: false, isSolo: false, myColor: null, gameActive: false, gameEnded: false, isDragging: false, dragStart: null, dragCurrent: null, canShoot: true, peer: null, conn: null, myId: null, scores: { white: 0, black: 0 }, currentPlayer: 'white', turnInProgress: false, lastPocketed: [] }; const canvas = document.getElementById('table'); const ctx = canvas.getContext('2d', { alpha: false }); // ========================================== // VECTOR CLASS (like Ball in pool) // ========================================== class Vector2 { constructor(x, y) { this.x = x; this.y = y; } add(v) { return new Vector2(this.x + v.x, this.y + v.y); } sub(v) { return new Vector2(this.x - v.x, this.y - v.y); } mult(s) { return new Vector2(this.x * s, this.y * s); } mag() { return Math.hypot(this.x, this.y); } normalize() { const m = this.mag(); return m > 0 ? new Vector2(this.x/m, this.y/m) : new Vector2(0,0); } dist(v) { return Math.hypot(this.x - v.x, this.y - v.y); } copy() { return new Vector2(this.x, this.y); } } // ========================================== // BODY CLASS (like Ball in pool) // ========================================== class Body { constructor(x, y, radius, mass, label) { this.pos = new Vector2(x, y); this.vel = new Vector2(0, 0); this.radius = radius; this.mass = mass; this.label = label; this.active = true; this.id = Math.random().toString(36).substr(2, 9); } get speed() { return this.vel.mag(); } get moving() { return this.speed > STOP_THRESHOLD; } update() { if (!this.active) return; // Sub-stepping for CCD const dt = 1/8; for(let i=0; i<8; i++) { this.pos = this.pos.add(this.vel.mult(dt)); } this.vel = this.vel.mult(FRICTION); if (this.speed < STOP_THRESHOLD) this.vel = new Vector2(0,0); // Wall collisions const r = this.radius; if (this.pos.x < r) { this.pos.x = r; this.vel.x = Math.abs(this.vel.x) * WALL_BOUNCE; } if (this.pos.x > BOARD_SIZE - r) { this.pos.x = BOARD_SIZE - r; this.vel.x = -Math.abs(this.vel.x) * WALL_BOUNCE; } if (this.pos.y < r) { this.pos.y = r; this.vel.y = Math.abs(this.vel.y) * WALL_BOUNCE; } if (this.pos.y > BOARD_SIZE - r) { this.pos.y = BOARD_SIZE - r; this.vel.y = -Math.abs(this.vel.y) * WALL_BOUNCE; } } resolve(other) { const dx = other.pos.x - this.pos.x; const dy = other.pos.y - this.pos.y; const dist = Math.hypot(dx, dy); const minDist = this.radius + other.radius; if (dist >= minDist || dist === 0) return false; const overlap = minDist - dist; const nx = dx / dist; const ny = dy / dist; this.pos.x -= nx * overlap * 0.5; this.pos.y -= ny * overlap * 0.5; other.pos.x += nx * overlap * 0.5; other.pos.y += ny * overlap * 0.5; const dvx = other.vel.x - this.vel.x; const dvy = other.vel.y - this.vel.y; const velAlong = dvx * nx + dvy * ny; if (velAlong > 0) return false; const j = -BALL_BOUNCE * velAlong; this.vel.x -= j * nx; this.vel.y -= j * ny; other.vel.x += j * nx; other.vel.y += j * ny; return true; } draw(ctx) { if (!this.active) return; ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.arc(this.pos.x + 2, this.pos.y + 2, this.radius, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2); if (this.label === 'striker') { const grad = ctx.createRadialGradient(this.pos.x-3, this.pos.y-3, 0, this.pos.x, this.pos.y, this.radius); grad.addColorStop(0, '#ffffff'); grad.addColorStop(1, '#cccccc'); ctx.fillStyle = grad; ctx.fill(); ctx.strokeStyle = '#999'; ctx.lineWidth = 1; ctx.stroke(); } else if (this.label === 'white') { ctx.fillStyle = '#ffffff'; ctx.fill(); } else if (this.label === 'black') { ctx.fillStyle = '#222222'; ctx.fill(); } else if (this.label === 'queen') { ctx.fillStyle = '#aa0000'; ctx.fill(); ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 2; ctx.stroke(); } ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.arc(this.pos.x - this.radius*0.3, this.pos.y - this.radius*0.3, this.radius*0.25, 0, Math.PI*2); ctx.fill(); } } // ========================================== // GAME LOGIC - EXACT SAME PATTERN AS POOL // ========================================== function initBoard() { state.pieces = []; state.striker = null; state.scores = { white: 0, black: 0 }; state.currentPlayer = 'white'; state.turnInProgress = false; state.lastPocketed = []; const cx = BOARD_SIZE/2, cy = BOARD_SIZE/2; // Queen state.pieces.push(new Body(cx, cy, QUEEN_RADIUS, 1, 'queen')); // Inner circle for(let i=0; i<6; i++) { const angle = (i/6) * Math.PI * 2; const x = cx + Math.cos(angle) * 28; const y = cy + Math.sin(angle) * 28; const label = i%2===0 ? 'white' : 'black'; state.pieces.push(new Body(x, y, PIECE_RADIUS, 1, label)); } // Outer circle for(let i=0; i<12; i++) { const angle = (i/12) * Math.PI * 2 + Math.PI/12; const x = cx + Math.cos(angle) * 52; const y = cy + Math.sin(angle) * 52; const label = i%2===0 ? 'black' : 'white'; state.pieces.push(new Body(x, y, PIECE_RADIUS, 1, label)); } resetStriker(); } function resetStriker() { if (state.striker) state.striker.active = false; const y = state.currentPlayer === 'white' ? BASELINE_Y_WHITE : BASELINE_Y_BLACK; state.striker = new Body(250, y, STRIKER_RADIUS, 2, 'striker'); } function placeStriker(x) { const minX = 50 + STRIKER_RADIUS; const maxX = 450 - STRIKER_RADIUS; x = Math.max(minX, Math.min(maxX, x)); const y = state.currentPlayer === 'white' ? BASELINE_Y_WHITE : BASELINE_Y_BLACK; if (state.striker) { state.striker.pos.x = x; state.striker.pos.y = y; state.striker.vel = new Vector2(0,0); } } function updatePhysics() { for (let b of state.pieces) b.update(); if (state.striker) state.striker.update(); for (let pass = 0; pass < 2; pass++) { for (let i = 0; i < state.pieces.length; i++) { for (let j = i + 1; j < state.pieces.length; j++) { state.pieces[i].resolve(state.pieces[j]); } if (state.striker) state.pieces[i].resolve(state.striker); } } // Check pockets for (let b of [...state.pieces, state.striker]) { if (!b || !b.active) continue; for (let p of POCKETS) { if (Math.hypot(b.pos.x - p[0], b.pos.y - p[1]) < POCKET_RADIUS - 2) { b.active = false; state.lastPocketed.push(b); if (b === state.striker) state.striker = null; break; } } } } function anyMoving() { return state.pieces.some(b => b.active && b.moving) || (state.striker && state.striker.moving); } function endTurn() { let myPieces = 0, opponentPieces = 0, queenPocketed = false, strikerPocketed = !state.striker; for (let b of state.lastPocketed) { if (b.label === state.currentPlayer) { myPieces++; state.scores[state.currentPlayer]++; } else if (b.label === 'queen') queenPocketed = true; else if (b.label !== 'striker') opponentPieces++; } if (strikerPocketed && state.scores[state.currentPlayer] > 0) state.scores[state.currentPlayer]--; if (queenPocketed) { if (myPieces > 0) state.scores[state.currentPlayer] += 5; else setTimeout(() => state.pieces.push(new Body(250, 250, QUEEN_RADIUS, 1, 'queen')), 500); } const foul = strikerPocketed || opponentPieces > 0; const continueTurn = !foul && myPieces > 0 && !queenPocketed; if (!continueTurn) state.currentPlayer = state.currentPlayer === 'white' ? 'black' : 'white'; state.turnInProgress = false; resetStriker(); state.lastPocketed = []; if (!state.isSolo && state.conn) { state.conn.send({ type: 'TURN_PASS', scores: state.scores, currentPlayer: state.currentPlayer, continueTurn: continueTurn }); } updateUI(); } // ========================================== // NETWORKING - EXACT COPY FROM POOL // ========================================== function initPeer() { const randomId = Math.floor(1000 + Math.random() * 9000).toString(); state.peer = new Peer(randomId, { config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] } }); setTimeout(() => { if (!state.myId) document.getElementById('my-id').innerHTML = '<span style="color:#ff6666">Timeout</span>'; }, 15000); state.peer.on('open', id => { state.myId = id; document.getElementById('my-id').innerHTML = ` <div class="code-display">${id}</div> <button class="copy-btn" onclick="navigator.clipboard.writeText('${id}')">Copy</button> `; document.getElementById('join-id').disabled = false; document.getElementById('join-btn').disabled = false; }); state.peer.on('connection', conn => { state.isHost = true; state.myColor = 'white'; setupConn(conn); startGame(); }); } function connect() { const id = document.getElementById('join-id').value.trim(); if (!id || id.length !== 4) return alert('Enter 4-digit code'); state.isHost = false; state.myColor = 'black'; const conn = state.peer.connect(id, { reliable: true }); document.getElementById('my-id').innerHTML = '<span class="spinner"></span> Connecting...'; setupConn(conn); } function setupConn(conn) { state.conn = conn; conn.on('open', () => { if (!state.isHost) startGame(); }); conn.on('data', data => { if (data.type === 'TURN_PASS') { state.scores = data.scores; state.currentPlayer = data.currentPlayer; state.turnInProgress = false; resetStriker(); updateUI(); } else if (data.type === 'SHOT' && state.striker) { state.striker.vel = new Vector2(data.vx, data.vy); state.turnInProgress = true; state.isMyTurn = false; updateUI(); } else if (data.type === 'STRIKER_POS' && state.striker) { placeStriker(data.x); } }); } // ========================================== // INPUT - EXACT SAME AS POOL // ========================================== function getPos(e) { const rect = canvas.getBoundingClientRect(); const scaleX = BOARD_SIZE / rect.width; const scaleY = BOARD_SIZE / rect.height; const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY }; } function onPointerDown(e) { if (!state.isMyTurn || anyMoving() || !state.gameActive || !state.canShoot) return; if (!state.striker) return; const pos = getPos(e); const dist = Math.hypot(pos.x - state.striker.pos.x, pos.y - state.striker.pos.y); if (dist < STRIKER_RADIUS * 3) { state.isDragging = true; state.dragStart = pos; state.dragCurrent = pos; document.getElementById('power-meter').style.display = 'block'; e.preventDefault(); } } function onPointerMove(e) { if (!state.isDragging) return; state.dragCurrent = getPos(e); // Move striker horizontally on baseline if (state.striker) { placeStriker(state.dragCurrent.x); if (state.conn) state.conn.send({type: 'STRIKER_POS', x: state.striker.pos.x}); } // Calculate power from pull-back const dy = state.dragStart.y - state.dragCurrent.y; const powerPercent = Math.min(Math.abs(dy) / 150 * 100, 100); document.getElementById('power-fill').style.width = powerPercent + '%'; e.preventDefault(); } function onPointerUp(e) { if (!state.isDragging) return; state.isDragging = false; document.getElementById('power-meter').style.display = 'none'; const dx = state.dragStart.x - state.dragCurrent.x; const dy = state.dragStart.y - state.dragCurrent.y; const dist = Math.hypot(dx, dy); if (dist > 15) { const power = Math.min(dist * 0.5, MAX_POWER); const angle = Math.atan2(dy, dx); state.striker.vel = new Vector2(Math.cos(angle) * power, Math.sin(angle) * power); state.turnInProgress = true; state.canShoot = false; if (!state.isSolo && state.conn) { state.conn.send({type: 'SHOT', vx: state.striker.vel.x, vy: state.striker.vel.y}); } } } canvas.addEventListener('mousedown', onPointerDown, { passive: false }); canvas.addEventListener('mousemove', onPointerMove, { passive: false }); canvas.addEventListener('mouseup', onPointerUp, { passive: false }); canvas.addEventListener('touchstart', onPointerDown, { passive: false }); canvas.addEventListener('touchmove', onPointerMove, { passive: false }); canvas.addEventListener('touchend', onPointerUp, { passive: false }); // ========================================== // RENDERING - EXACT SAME AS POOL // ========================================== function resize() { const container = document.getElementById('canvas-container'); const aspect = 1; // Square board let w = container.clientWidth - 40; let h = w; if (h > container.clientHeight - 40) { h = container.clientHeight - 40; w = h; } canvas.width = BOARD_SIZE; canvas.height = BOARD_SIZE; canvas.style.width = w + 'px'; canvas.style.height = h + 'px'; } function draw() { // Board ctx.fillStyle = '#1a4d2e'; ctx.fillRect(0, 0, BOARD_SIZE, BOARD_SIZE); // Border ctx.strokeStyle = '#8B4513'; ctx.lineWidth = 20; ctx.strokeRect(0, 0, BOARD_SIZE, BOARD_SIZE); // Pockets ctx.fillStyle = '#0d1117'; for (let p of POCKETS) { ctx.beginPath(); ctx.arc(p[0], p[1], POCKET_RADIUS, 0, Math.PI * 2); ctx.fill(); } // Baselines ctx.strokeStyle = 'rgba(255,215,0,0.6)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(30, BASELINE_Y_WHITE); ctx.lineTo(470, BASELINE_Y_WHITE); ctx.stroke(); ctx.beginPath(); ctx.moveTo(30, BASELINE_Y_BLACK); ctx.lineTo(470, BASELINE_Y_BLACK); ctx.stroke(); // Center circle ctx.strokeStyle = 'rgba(255,215,0,0.3)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(250, 250, 45, 0, Math.PI * 2); ctx.stroke(); // Bodies for (let b of state.pieces) b.draw(ctx); if (state.striker) state.striker.draw(ctx); // Aim line if (state.isDragging && state.dragCurrent && state.striker) { const dx = state.dragStart.x - state.dragCurrent.x; const dy = state.dragStart.y - state.dragCurrent.y; const power = Math.min(Math.hypot(dx, dy), 150); const angle = Math.atan2(dy, dx); ctx.strokeStyle = `rgba(255,255,255,${0.3 + power/300})`; ctx.lineWidth = 2; ctx.setLineDash([5, 5]); ctx.beginPath(); ctx.moveTo(state.striker.pos.x, state.striker.pos.y); ctx.lineTo( state.striker.pos.x + Math.cos(angle) * (100 + power), state.striker.pos.y + Math.sin(angle) * (100 + power) ); ctx.stroke(); ctx.setLineDash([]); } } // ========================================== // MAIN LOOP - EXACT SAME AS POOL // ========================================== function loop() { if (!state.gameActive) return; updatePhysics(); if (!state.canShoot && !anyMoving()) { state.canShoot = true; endTurn(); } draw(); requestAnimationFrame(loop); } // ========================================== // UI - EXACT SAME AS POOL // ========================================== function updateUI() { const p1 = document.getElementById('p1-badge'); const p2 = document.getElementById('p2-badge'); const turn = document.getElementById('turn-indicator'); if (state.isSolo) { p1.className = 'player-badge white active'; p1.textContent = '⚪ Practice'; p2.style.display = 'none'; } else { p1.textContent = state.isHost ? '⚪ You' : '⚪ Opp'; p2.textContent = state.isHost ? '⚫ Opp' : '⚫ You'; p1.className = 'player-badge white' + (state.isMyTurn ? ' active' : ''); p2.className = 'player-badge black' + (!state.isMyTurn ? ' active' : ''); } turn.textContent = state.isMyTurn ? (state.canShoot ? '★ YOUR TURN ★' : 'Moving...') : "OPPONENT'S TURN"; turn.style.color = state.isMyTurn ? (state.canShoot ? '#00ff00' : '#ffaa00') : '#ff6666'; } function startGame() { document.getElementById('setup').style.display = 'none'; document.getElementById('game-ui').style.display = 'flex'; document.getElementById('canvas-container').style.display = 'flex'; resize(); initBoard(); state.gameActive = true; state.canShoot = true; state.isMyTurn = state.isHost || state.isSolo; updateUI(); loop(); } function startSolo() { state.isSolo = true; state.isHost = true; state.myColor = 'white'; startGame(); } window.addEventListener('load', initPeer); window.addEventListener('resize', resize); </script> </body> </html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Carrom Pro</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --gold: #eec27e;
+            --dark: #0d1117;
+            --card: #161b22;
+            --felt: #1a4d2e;
+            --felt-dark: #0f2e1b;
+        }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: var(--dark);
+            color: #c9d1d9;
+            font-family: system-ui, sans-serif;
+            overflow: hidden;
+            touch-action: none;
+            user-select: none;
+        }
+        #setup {
+            position: fixed;
+            inset: 0;
+            background: rgba(13,17,23,0.98);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .code-display {
+            font-family: monospace;
+            background: #000;
+            color: var(--gold);
+            padding: 20px 40px;
+            border-radius: 12px;
+            letter-spacing: 8px;
+            font-size: 2.2rem;
+            border: 2px solid var(--gold);
+            margin: 20px 0;
+        }
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(238,194,126,0.2);
+            border-radius: 50%;
+            border-top-color: var(--gold);
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .btn {
+            background: var(--gold);
+            color: #3e2e14;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        .btn:disabled {
+            opacity: 0.5;
+        }
+        .btn-secondary {
+            background: transparent;
+            color: #8b949e;
+            border: 1px solid #30363d;
+            margin-top: 15px;
+        }
+        input {
+            padding: 15px;
+            text-align: center;
+            border-radius: 10px;
+            background: #111;
+            color: white;
+            border: 1px solid var(--gold);
+            font-size: 1.2rem;
+            width: 200px;
+        }
+        #game-ui {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: var(--card);
+            padding: 15px 20px;
+            border-bottom: 2px solid var(--gold);
+            display: none;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+        .player-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        .player-badge.active {
+            box-shadow: 0 0 20px var(--gold);
+            border: 2px solid var(--gold);
+        }
+        .white {
+            background: #fff;
+            color: #000;
+        }
+        .black {
+            background: #333;
+            color: #fff;
+            border: 1px solid #555;
+        }
+        #turn-indicator {
+            font-weight: 700;
+            color: var(--gold);
+            font-size: 1.1rem;
+        }
+        #canvas-container {
+            position: fixed;
+            top: 70px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at center, var(--felt) 0%, var(--felt-dark) 100%);
+        }
+        canvas {
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+            border-radius: 8px;
+            cursor: crosshair;
+            touch-action: none;
+        }
+        #power-meter {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 12px;
+            background: rgba(0,0,0,0.6);
+            border-radius: 20px;
+            overflow: hidden;
+            border: 2px solid var(--gold);
+            z-index: 20;
+            display: none;
+        }
+        #power-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #4caf50, #ffff00, #ff0000);
+        }
+        #end-screen {
+            position: fixed;
+            inset: 0;
+            background: rgba(13,17,23,0.95);
+            z-index: 100;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .copy-btn {
+            background: transparent;
+            border: 1px solid var(--gold);
+            color: var(--gold);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .error-toast {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #da3633;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            z-index: 200;
+            display: none;
+        }
+    </style>
+    <base target="_blank">
+</head>
+<body>
+    <div class="error-toast" id="error"></div>
+    
+    <div id="setup">
+        <h1 style="color: var(--gold); font-size: 2.5rem; margin-bottom: 10px;">🎯 Carrom</h1>
+        <div id="my-id"><span class="spinner"></span> Connecting...</div>
+        <div style="margin-top: 20px;">
+            <input type="text" id="join-id" placeholder="Enter Code" disabled>
+            <button class="btn" id="join-btn" onclick="connect()" disabled style="margin-left: 10px;">JOIN</button>
+        </div>
+        <button class="btn btn-secondary" onclick="startSolo()">Practice Solo</button>
+    </div>
+
+    <div id="game-ui">
+        <div class="player-badge white" id="p1-badge">⚪ P1</div>
+        <div id="turn-indicator">Wait</div>
+        <div class="player-badge black" id="p2-badge">⚫ P2</div>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="table"></canvas>
+    </div>
+
+    <div id="power-meter"><div id="power-fill"></div></div>
+
+    <div id="end-screen">
+        <h1 id="end-title" style="font-size: 3rem; color: var(--gold);">Game Over</h1>
+        <div id="end-msg" style="color: #8b949e; margin: 20px;"></div>
+        <button class="btn" onclick="location.reload()">Play Again</button>
+    </div>
+
+    <script>
+        // ==========================================
+        // CONSTANTS
+        // ==========================================
+        const BOARD_SIZE = 500;
+        const PIECE_RADIUS = 9;
+        const QUEEN_RADIUS = 9.5;
+        const STRIKER_RADIUS = 14;
+        const POCKET_RADIUS = 22;
+        const MAX_POWER = 15;
+        const FRICTION = 0.985;
+        const STOP_THRESHOLD = 0.05;
+        const WALL_BOUNCE = 0.7;
+        const BALL_BOUNCE = 0.85;
+        const WIN_SCORE = 9;
+        const POCKETS = [[30,30], [470,30], [30,470], [470,470]];
+        const BASELINE_Y_WHITE = 430;
+        const BASELINE_Y_BLACK = 70;
+
+        // ==========================================
+        // STATE
+        // ==========================================
+        const state = {
+            pieces: [],
+            striker: null,
+            isMyTurn: false,
+            isHost: false,
+            isSolo: false,
+            myColor: null,
+            gameActive: false,
+            gameEnded: false,
+            isDragging: false,
+            dragStart: null,
+            dragCurrent: null,
+            canShoot: true,
+            peer: null,
+            conn: null,
+            myId: null,
+            scores: { white: 0, black: 0 },
+            currentPlayer: 'white',
+            turnInProgress: false,
+            lastPocketed: []
+        };
+
+        const canvas = document.getElementById('table');
+        const ctx = canvas.getContext('2d', { alpha: false });
+
+        // ==========================================
+        // VECTOR CLASS
+        // ==========================================
+        class Vector2 {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+            }
+            add(v) {
+                return new Vector2(this.x + v.x, this.y + v.y);
+            }
+            sub(v) {
+                return new Vector2(this.x - v.x, this.y - v.y);
+            }
+            mult(s) {
+                return new Vector2(this.x * s, this.y * s);
+            }
+            mag() {
+                return Math.hypot(this.x, this.y);
+            }
+            normalize() {
+                const m = this.mag();
+                return m > 0 ? new Vector2(this.x / m, this.y / m) : new Vector2(0, 0);
+            }
+            dist(v) {
+                return Math.hypot(this.x - v.x, this.y - v.y);
+            }
+            copy() {
+                return new Vector2(this.x, this.y);
+            }
+        }
+
+        // ==========================================
+        // BODY CLASS
+        // ==========================================
+        class Body {
+            constructor(x, y, radius, mass, label) {
+                this.pos = new Vector2(x, y);
+                this.vel = new Vector2(0, 0);
+                this.radius = radius;
+                this.mass = mass;
+                this.label = label;
+                this.active = true;
+                this.id = Math.random().toString(36).substr(2, 9);
+            }
+            get speed() {
+                return this.vel.mag();
+            }
+            get moving() {
+                return this.speed > STOP_THRESHOLD;
+            }
+            update() {
+                if (!this.active) return;
+                const dt = 1 / 8;
+                for (let i = 0; i < 8; i++) {
+                    this.pos = this.pos.add(this.vel.mult(dt));
+                }
+                this.vel = this.vel.mult(FRICTION);
+                if (this.speed < STOP_THRESHOLD) this.vel = new Vector2(0, 0);
+
+                const r = this.radius;
+                if (this.pos.x < r) {
+                    this.pos.x = r;
+                    this.vel.x = Math.abs(this.vel.x) * WALL_BOUNCE;
+                }
+                if (this.pos.x > BOARD_SIZE - r) {
+                    this.pos.x = BOARD_SIZE - r;
+                    this.vel.x = -Math.abs(this.vel.x) * WALL_BOUNCE;
+                }
+                if (this.pos.y < r) {
+                    this.pos.y = r;
+                    this.vel.y = Math.abs(this.vel.y) * WALL_BOUNCE;
+                }
+                if (this.pos.y > BOARD_SIZE - r) {
+                    this.pos.y = BOARD_SIZE - r;
+                    this.vel.y = -Math.abs(this.vel.y) * WALL_BOUNCE;
+                }
+            }
+            resolve(other) {
+                const dx = other.pos.x - this.pos.x;
+                const dy = other.pos.y - this.pos.y;
+                const dist = Math.hypot(dx, dy);
+                const minDist = this.radius + other.radius;
+                if (dist >= minDist || dist === 0) return false;
+
+                const overlap = minDist - dist;
+                const nx = dx / dist;
+                const ny = dy / dist;
+
+                this.pos.x -= nx * overlap * 0.5;
+                this.pos.y -= ny * overlap * 0.5;
+                other.pos.x += nx * overlap * 0.5;
+                other.pos.y += ny * overlap * 0.5;
+
+                const dvx = other.vel.x - this.vel.x;
+                const dvy = other.vel.y - this.vel.y;
+                const velAlong = dvx * nx + dvy * ny;
+                if (velAlong > 0) return false;
+
+                const j = -BALL_BOUNCE * velAlong;
+                this.vel.x -= j * nx;
+                this.vel.y -= j * ny;
+                other.vel.x += j * nx;
+                other.vel.y += j * ny;
+                return true;
+            }
+            draw(ctx) {
+                if (!this.active) return;
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.beginPath();
+                ctx.arc(this.pos.x + 2, this.pos.y + 2, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+                if (this.label === 'striker') {
+                    const grad = ctx.createRadialGradient(this.pos.x - 3, this.pos.y - 3, 0, this.pos.x, this.pos.y, this.radius);
+                    grad.addColorStop(0, '#ffffff');
+                    grad.addColorStop(1, '#cccccc');
+                    ctx.fillStyle = grad;
+                    ctx.fill();
+                    ctx.strokeStyle = '#999';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                } else if (this.label === 'white') {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fill();
+                } else if (this.label === 'black') {
+                    ctx.fillStyle = '#222222';
+                    ctx.fill();
+                } else if (this.label === 'queen') {
+                    ctx.fillStyle = '#aa0000';
+                    ctx.fill();
+                    ctx.strokeStyle = '#ffd700';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+                ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                ctx.beginPath();
+                ctx.arc(this.pos.x - this.radius * 0.3, this.pos.y - this.radius * 0.3, this.radius * 0.25, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // ==========================================
+        // GAME LOGIC
+        // ==========================================
+        function initBoard() {
+            state.pieces = [];
+            state.striker = null;
+            state.scores = { white: 0, black: 0 };
+            state.currentPlayer = 'white';
+            state.turnInProgress = false;
+            state.lastPocketed = [];
+
+            const cx = BOARD_SIZE / 2, cy = BOARD_SIZE / 2;
+            state.pieces.push(new Body(cx, cy, QUEEN_RADIUS, 1, 'queen'));
+
+            for (let i = 0; i < 6; i++) {
+                const angle = (i / 6) * Math.PI * 2;
+                const x = cx + Math.cos(angle) * 28;
+                const y = cy + Math.sin(angle) * 28;
+                const label = i % 2 === 0 ? 'white' : 'black';
+                state.pieces.push(new Body(x, y, PIECE_RADIUS, 1, label));
+            }
+
+            for (let i = 0; i < 12; i++) {
+                const angle = (i / 12) * Math.PI * 2 + Math.PI / 12;
+                const x = cx + Math.cos(angle) * 52;
+                const y = cy + Math.sin(angle) * 52;
+                const label = i % 2 === 0 ? 'black' : 'white';
+                state.pieces.push(new Body(x, y, PIECE_RADIUS, 1, label));
+            }
+            resetStriker();
+        }
+
+        function resetStriker() {
+            if (state.striker) state.striker.active = false;
+            const y = state.currentPlayer === 'white' ? BASELINE_Y_WHITE : BASELINE_Y_BLACK;
+            state.striker = new Body(250, y, STRIKER_RADIUS, 2, 'striker');
+        }
+
+        function placeStriker(x) {
+            const minX = 50 + STRIKER_RADIUS;
+            const maxX = 450 - STRIKER_RADIUS;
+            x = Math.max(minX, Math.min(maxX, x));
+            const y = state.currentPlayer === 'white' ? BASELINE_Y_WHITE : BASELINE_Y_BLACK;
+            if (state.striker) {
+                state.striker.pos.x = x;
+                state.striker.pos.y = y;
+                state.striker.vel = new Vector2(0, 0);
+            }
+        }
+
+        function updatePhysics() {
+            for (let b of state.pieces) b.update();
+            if (state.striker) state.striker.update();
+
+            for (let pass = 0; pass < 2; pass++) {
+                for (let i = 0; i < state.pieces.length; i++) {
+                    for (let j = i + 1; j < state.pieces.length; j++) {
+                        state.pieces[i].resolve(state.pieces[j]);
+                    }
+                    if (state.striker) state.pieces[i].resolve(state.striker);
+                }
+            }
+
+            for (let b of [...state.pieces, state.striker]) {
+                if (!b || !b.active) continue;
+                for (let p of POCKETS) {
+                    if (Math.hypot(b.pos.x - p[0], b.pos.y - p[1]) < POCKET_RADIUS - 2) {
+                        b.active = false;
+                        state.lastPocketed.push(b);
+                        if (b === state.striker) state.striker = null;
+                        break;
+                    }
+                }
+            }
+        }
+
+        function anyMoving() {
+            return state.pieces.some(b => b.active && b.moving) || (state.striker && state.striker.moving);
+        }
+
+        function endTurn() {
+            let myPieces = 0, opponentPieces = 0, queenPocketed = false, strikerPocketed = !state.striker;
+
+            for (let b of state.lastPocketed) {
+                if (b.label === state.currentPlayer) {
+                    myPieces++;
+                    state.scores[state.currentPlayer]++;
+                } else if (b.label === 'queen') queenPocketed = true;
+                else if (b.label !== 'striker') opponentPieces++;
+            }
+
+            if (strikerPocketed && state.scores[state.currentPlayer] > 0) state.scores[state.currentPlayer]--;
+
+            if (queenPocketed) {
+                if (myPieces > 0) state.scores[state.currentPlayer] += 5;
+                else setTimeout(() => state.pieces.push(new Body(250, 250, QUEEN_RADIUS, 1, 'queen')), 500);
+            }
+
+            const foul = strikerPocketed || opponentPieces > 0;
+            const continueTurn = !foul && myPieces > 0 && !queenPocketed;
+
+            if (!continueTurn) state.currentPlayer = state.currentPlayer === 'white' ? 'black' : 'white';
+            state.turnInProgress = false;
+            resetStriker();
+            state.lastPocketed = [];
+
+            if (!state.isSolo && state.conn && state.conn.open) {
+                state.conn.send({
+                    type: 'TURN_PASS',
+                    scores: state.scores,
+                    currentPlayer: state.currentPlayer,
+                    continueTurn: continueTurn
+                });
+            }
+            updateUI();
+        }
+
+        // ==========================================
+        // NETWORKING - FIXED TO MATCH POOL
+        // ==========================================
+        function initPeer() {
+            const randomId = Math.floor(1000 + Math.random() * 9000).toString();
+            state.peer = new Peer(randomId, {
+                config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+            });
+
+            setTimeout(() => {
+                if (!state.myId) document.getElementById('my-id').innerHTML = '<span style="color:#ff6666">Timeout - Refresh to try again</span>';
+            }, 15000);
+
+            state.peer.on('open', id => {
+                state.myId = id;
+                document.getElementById('my-id').innerHTML = `
+                    <div class="code-display">${id}</div>
+                    <button class="copy-btn" onclick="navigator.clipboard.writeText('${id}')">Copy</button>
+                `;
+                document.getElementById('join-id').disabled = false;
+                document.getElementById('join-btn').disabled = false;
+            });
+
+            // ERROR HANDLER - THIS WAS MISSING!
+            state.peer.on('error', err => {
+                console.error('PeerJS Error:', err);
+                if (err.type === 'unavailable-id') {
+                    // ID taken, retry with new ID
+                    initPeer();
+                } else if (err.type === 'network') {
+                    document.getElementById('my-id').innerHTML = '<span style="color:#ff6666">Network Error. Check connection.</span>';
+                } else {
+                    document.getElementById('my-id').innerHTML = `<span style="color:#ff6666">Error: ${err.type}</span>`;
+                }
+            });
+
+            state.peer.on('connection', conn => {
+                state.isHost = true;
+                state.myColor = 'white';
+                setupConn(conn);
+                startGame();
+            });
+        }
+
+        function connect() {
+            const id = document.getElementById('join-id').value.trim();
+            if (!id || id.length !== 4) return alert('Enter 4-digit code');
+
+            state.isHost = false;
+            state.myColor = 'black';
+            const conn = state.peer.connect(id, { reliable: true });
+            document.getElementById('my-id').innerHTML = '<span class="spinner"></span> Connecting...';
+            setupConn(conn);
+        }
+
+        function setupConn(conn) {
+            state.conn = conn;
+
+            conn.on('open', () => {
+                if (!state.isHost) startGame();
+            });
+
+            conn.on('data', data => {
+                if (data.type === 'TURN_PASS') {
+                    state.scores = data.scores;
+                    state.currentPlayer = data.currentPlayer;
+                    state.turnInProgress = false;
+                    state.isMyTurn = (state.myColor === data.currentPlayer);
+                    resetStriker();
+                    updateUI();
+                } else if (data.type === 'SHOT' && state.striker) {
+                    state.striker.vel = new Vector2(data.vx, data.vy);
+                    state.turnInProgress = true;
+                    state.isMyTurn = false;
+                    updateUI();
+                } else if (data.type === 'STRIKER_POS' && state.striker) {
+                    placeStriker(data.x);
+                }
+            });
+
+            conn.on('error', err => {
+                console.error('Connection error:', err);
+                showError('Connection lost. Refresh to reconnect.');
+            });
+
+            conn.on('close', () => {
+                if (state.gameActive && !state.gameEnded) {
+                    showError('Opponent disconnected.');
+                    state.gameActive = false;
+                }
+            });
+        }
+
+        // ==========================================
+        // INPUT
+        // ==========================================
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = BOARD_SIZE / rect.width;
+            const scaleY = BOARD_SIZE / rect.height;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
+        }
+
+        function onPointerDown(e) {
+            if (!state.isMyTurn || anyMoving() || !state.gameActive || !state.canShoot) return;
+            if (!state.striker) return;
+
+            const pos = getPos(e);
+            const dist = Math.hypot(pos.x - state.striker.pos.x, pos.y - state.striker.pos.y);
+            if (dist < STRIKER_RADIUS * 3) {
+                state.isDragging = true;
+                state.dragStart = pos;
+                state.dragCurrent = pos;
+                document.getElementById('power-meter').style.display = 'block';
+                e.preventDefault();
+            }
+        }
+
+        function onPointerMove(e) {
+            if (!state.isDragging) return;
+            state.dragCurrent = getPos(e);
+
+            if (state.striker) {
+                placeStriker(state.dragCurrent.x);
+                if (state.conn && state.conn.open) {
+                    state.conn.send({ type: 'STRIKER_POS', x: state.striker.pos.x });
+                }
+            }
+
+            const dy = state.dragStart.y - state.dragCurrent.y;
+            const powerPercent = Math.min(Math.abs(dy) / 150 * 100, 100);
+            document.getElementById('power-fill').style.width = powerPercent + '%';
+            e.preventDefault();
+        }
+
+        function onPointerUp(e) {
+            if (!state.isDragging) return;
+            state.isDragging = false;
+            document.getElementById('power-meter').style.display = 'none';
+
+            const dx = state.dragStart.x - state.dragCurrent.x;
+            const dy = state.dragStart.y - state.dragCurrent.y;
+            const dist = Math.hypot(dx, dy);
+
+            if (dist > 15) {
+                const power = Math.min(dist * 0.5, MAX_POWER);
+                const angle = Math.atan2(dy, dx);
+                state.striker.vel = new Vector2(Math.cos(angle) * power, Math.sin(angle) * power);
+                state.turnInProgress = true;
+                state.canShoot = false;
+
+                if (!state.isSolo && state.conn && state.conn.open) {
+                    state.conn.send({ type: 'SHOT', vx: state.striker.vel.x, vy: state.striker.vel.y });
+                }
+            }
+        }
+
+        canvas.addEventListener('mousedown', onPointerDown, { passive: false });
+        canvas.addEventListener('mousemove', onPointerMove, { passive: false });
+        canvas.addEventListener('mouseup', onPointerUp, { passive: false });
+        canvas.addEventListener('touchstart', onPointerDown, { passive: false });
+        canvas.addEventListener('touchmove', onPointerMove, { passive: false });
+        canvas.addEventListener('touchend', onPointerUp, { passive: false });
+
+        // ==========================================
+        // RENDERING
+        // ==========================================
+        function resize() {
+            const container = document.getElementById('canvas-container');
+            let w = container.clientWidth - 40;
+            let h = w;
+            if (h > container.clientHeight - 40) {
+                h = container.clientHeight - 40;
+                w = h;
+            }
+            canvas.width = BOARD_SIZE;
+            canvas.height = BOARD_SIZE;
+            canvas.style.width = w + 'px';
+            canvas.style.height = h + 'px';
+        }
+
+        function draw() {
+            ctx.fillStyle = '#1a4d2e';
+            ctx.fillRect(0, 0, BOARD_SIZE, BOARD_SIZE);
+
+            ctx.strokeStyle = '#8B4513';
+            ctx.lineWidth = 20;
+            ctx.strokeRect(0, 0, BOARD_SIZE, BOARD_SIZE);
+
+            ctx.fillStyle = '#0d1117';
+            for (let p of POCKETS) {
+                ctx.beginPath();
+                ctx.arc(p[0], p[1], POCKET_RADIUS, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.strokeStyle = 'rgba(255,215,0,0.6)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(30, BASELINE_Y_WHITE);
+            ctx.lineTo(470, BASELINE_Y_WHITE);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(30, BASELINE_Y_BLACK);
+            ctx.lineTo(470, BASELINE_Y_BLACK);
+            ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(255,215,0,0.3)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(250, 250, 45, 0, Math.PI * 2);
+            ctx.stroke();
+
+            for (let b of state.pieces) b.draw(ctx);
+            if (state.striker) state.striker.draw(ctx);
+
+            if (state.isDragging && state.dragCurrent && state.striker) {
+                const dx = state.dragStart.x - state.dragCurrent.x;
+                const dy = state.dragStart.y - state.dragCurrent.y;
+                const power = Math.min(Math.hypot(dx, dy), 150);
+                const angle = Math.atan2(dy, dx);
+
+                ctx.strokeStyle = `rgba(255,255,255,${0.3 + power / 300})`;
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(state.striker.pos.x, state.striker.pos.y);
+                ctx.lineTo(
+                    state.striker.pos.x + Math.cos(angle) * (100 + power),
+                    state.striker.pos.y + Math.sin(angle) * (100 + power)
+                );
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+
+        // ==========================================
+        // MAIN LOOP
+        // ==========================================
+        function loop() {
+            if (!state.gameActive) return;
+            updatePhysics();
+
+            if (!state.canShoot && !anyMoving()) {
+                state.canShoot = true;
+                endTurn();
+            }
+
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        // ==========================================
+        // UI
+        // ==========================================
+        function showError(msg) {
+            const el = document.getElementById('error');
+            el.textContent = msg;
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 3000);
+        }
+
+        function updateUI() {
+            const p1 = document.getElementById('p1-badge');
+            const p2 = document.getElementById('p2-badge');
+            const turn = document.getElementById('turn-indicator');
+
+            if (state.isSolo) {
+                p1.className = 'player-badge white active';
+                p1.textContent = '⚪ Practice';
+                p2.style.display = 'none';
+            } else {
+                const isWhite = state.myColor === 'white';
+                p1.textContent = isWhite ? '⚪ You' : '⚪ Opp';
+                p2.textContent = isWhite ? '⚫ Opp' : '⚫ You';
+                p1.className = 'player-badge white' + (state.isMyTurn ? ' active' : '');
+                p2.className = 'player-badge black' + (!state.isMyTurn ? ' active' : '');
+            }
+
+            turn.textContent = state.isMyTurn ? (state.canShoot ? '★ YOUR TURN ★' : 'Moving...') : "OPPONENT'S TURN";
+            turn.style.color = state.isMyTurn ? (state.canShoot ? '#00ff00' : '#ffaa00') : '#ff6666';
+        }
+
+        function startGame() {
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('game-ui').style.display = 'flex';
+            document.getElementById('canvas-container').style.display = 'flex';
+            resize();
+            initBoard();
+            state.gameActive = true;
+            state.canShoot = true;
+            state.isMyTurn = state.isHost || state.isSolo;
+            updateUI();
+            loop();
+        }
+
+        function startSolo() {
+            state.isSolo = true;
+            state.isHost = true;
+            state.myColor = 'white';
+            startGame();
+        }
+
+        window.addEventListener('load', initPeer);
+        window.addEventListener('resize', resize);
+    </script>
+</body>
+</html>
