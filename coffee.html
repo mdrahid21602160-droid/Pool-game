@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Play Games</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: system-ui, sans-serif;
+            background: #1a1a2e;
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo {
+            width: 80px;
+            height: 80px;
+            background: #eec27e;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            margin: 0 auto 15px;
+        }
+        h1 { font-size: 1.5rem; margin-bottom: 5px; }
+        .shop-name { color: #eec27e; font-size: 0.9rem; }
+        
+        .games {
+            width: 100%;
+            max-width: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .game-btn {
+            background: #16213e;
+            border: 2px solid #0f3460;
+            padding: 20px;
+            border-radius: 12px;
+            text-decoration: none;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            transition: all 0.2s;
+        }
+        .game-btn:hover, .game-btn:active {
+            border-color: #eec27e;
+            transform: translateX(5px);
+        }
+        .icon { font-size: 2.5rem; }
+        .game-info { flex: 1; }
+        .game-title { font-weight: bold; font-size: 1.2rem; }
+        .game-meta { color: #888; font-size: 0.85rem; margin-top: 3px; }
+        
+        .footer {
+            margin-top: auto;
+            padding-top: 40px;
+            color: #666;
+            font-size: 0.8rem;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">☕</div>
+        <h1>Play While You Wait</h1>
+        <p class="shop-name">Scan to play with friends</p>
+    </div>
+    
+    <div class="games">
+        <a href="pool.html" class="game-btn">
+            <span class="icon">🎱</span>
+            <div class="game-info">
+                <div class="game-title">Pool</div>
+                <div class="game-meta">2 players • 5-10 min</div>
+            </div>
+        </a>
+        
+        <a href="chess.html" class="game-btn">
+            <span class="icon">♟️</span>
+            <div class="game-info">
+                <div class="game-title">Chess</div>
+                <div class="game-meta">2 players • 10-30 min</div>
+            </div>
+        </a>
+        
+        <a href="checkers.html" class="game-btn">
+            <span class="icon">🔴</span>
+            <div class="game-info">
+                <div class="game-title">Checkers</div>
+                <div class="game-meta">2 players • 5-15 min</div>
+            </div>
+        </a>
+    </div>
+    
+    <div class="footer">
+        Games by P2P Arcade<br>
+        Ask staff for help
+    </div>
+</body>
+</html>
