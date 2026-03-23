@@ -1,308 +1,452 @@
-<!-- index.html - P2P Arcade Hub -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>P2P Arcade Hub</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Café Gaming</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
-        :root {
-            --gold: #eec27e;
-            --dark: #0d1117;
-            --card: #161b22;
-            --border: #30363d;
-            --accent: #238636;
-            --danger: #da3633;
-        }
-        
         body {
-            background: var(--dark);
-            color: #c9d1d9;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: #1a1a2e;
+            color: white;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            padding: 40px 20px;
         }
-
-        .hub-header {
+        
+        .timer-bar {
+            background: #238636;
+            color: white;
+            padding: 20px;
             text-align: center;
-            margin-bottom: 50px;
-            animation: fadeIn 0.8s ease-out;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        h1 {
-            color: var(--gold);
-            font-size: clamp(3rem, 10vw, 5rem);
-            margin: 0;
-            text-shadow: 0 0 30px rgba(238, 194, 126, 0.4);
-            letter-spacing: -2px;
-        }
-
-        .subtitle {
-            color: #8b949e;
-            font-size: 1.3rem;
-            margin-top: 10px;
-            font-weight: 300;
-        }
-
-        .stats-bar {
-            display: flex;
-            gap: 30px;
-            margin-top: 20px;
-            font-size: 0.9rem;
-            color: #8b949e;
-        }
-
-        .stat-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .stat-item::before {
-            content: '';
-            width: 8px;
-            height: 8px;
-            background: var(--accent);
-            border-radius: 50%;
-        }
-
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 25px;
-            width: 100%;
-            max-width: 1400px;
-        }
-
-        .card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            padding: 35px;
-            border-radius: 16px;
-            text-decoration: none;
-            color: inherit;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            text-align: center;
-        }
-
-        .card::before {
-            content: '';
-            position: absolute;
+            font-size: 1.5em;
+            font-weight: bold;
+            position: sticky;
             top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, var(--gold), transparent);
-            opacity: 0;
-            transition: opacity 0.3s;
+            z-index: 100;
+            transition: all 0.3s;
         }
-
-        .card:hover {
-            border-color: var(--gold);
-            transform: translateY(-8px);
-            box-shadow: 0 20px 40px rgba(238, 194, 126, 0.1);
+        
+        .timer-bar.warning {
+            background: #eec27e;
+            color: #1a1a2e;
+            animation: pulse 1s infinite;
         }
-
-        .card:hover::before {
-            opacity: 1;
+        
+        .timer-bar.expired {
+            background: #da3633;
         }
-
-        .card-icon {
-            font-size: 4.5rem;
-            margin-bottom: 20px;
-            display: block;
-            filter: grayscale(0.3);
-            transition: filter 0.3s;
-        }
-
-        .card:hover .card-icon {
-            filter: grayscale(0);
-            transform: scale(1.1);
-        }
-
-        .card-title {
-            font-size: 1.6rem;
-            font-weight: 700;
-            margin-bottom: 8px;
-            color: #f0f6fc;
-        }
-
-        .card-desc {
-            color: #8b949e;
-            font-size: 0.95rem;
-            line-height: 1.5;
-            margin-bottom: 15px;
-        }
-
-        .card-meta {
-            display: flex;
-            gap: 15px;
-            font-size: 0.8rem;
-            color: #6e7681;
-        }
-
-        .badge {
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .new-badge {
-            background: var(--accent);
-            color: white;
-        }
-
-        .hot-badge {
-            background: var(--danger);
-            color: white;
-        }
-
-        footer {
-            margin-top: 60px;
-            text-align: center;
-            color: #484f58;
-            font-size: 0.9rem;
-        }
-
-        .connection-status {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 10px 20px;
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            font-size: 0.85rem;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--accent);
-            animation: pulse 2s infinite;
-        }
-
+        
         @keyframes pulse {
             0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+            50% { opacity: 0.8; }
         }
-
-        @media (max-width: 600px) {
-            .grid { grid-template-columns: 1fr; }
-            .stats-bar { flex-direction: column; gap: 10px; }
+        
+        .timer-bar .label {
+            font-size: 0.6em;
+            font-weight: normal;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .content {
+            flex: 1;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            width: 100%;
+        }
+        
+        #loginScreen {
+            text-align: center;
+            padding-top: 60px;
+        }
+        
+        .logo {
+            font-size: 5em;
+            margin-bottom: 10px;
+        }
+        
+        h1 {
+            color: #eec27e;
+            font-size: 2.2em;
+            margin-bottom: 10px;
+        }
+        
+        .tagline {
+            color: #8b949e;
+            font-size: 1.1em;
+            margin-bottom: 50px;
+        }
+        
+        .login-box {
+            background: #16213e;
+            border: 2px solid #0f3460;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 450px;
+            margin: 0 auto;
+        }
+        
+        .code-inputs {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 30px;
+        }
+        
+        .code-inputs input {
+            width: 55px;
+            height: 70px;
+            text-align: center;
+            font-size: 2em;
+            font-weight: bold;
+            border: 3px solid #0f3460;
+            border-radius: 12px;
+            background: #0d1117;
+            color: white;
+            text-transform: uppercase;
+        }
+        
+        .code-inputs input:focus {
+            outline: none;
+            border-color: #eec27e;
+            background: #1a1a2e;
+        }
+        
+        .submit-btn {
+            width: 100%;
+            padding: 20px;
+            background: #eec27e;
+            color: #1a1a2e;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.3em;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .submit-btn:hover {
+            background: #f0d9a0;
+        }
+        
+        .error {
+            color: #da3633;
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(218, 54, 51, 0.1);
+            border-radius: 10px;
+            display: none;
+        }
+        
+        .help {
+            margin-top: 40px;
+            color: #8b949e;
+        }
+        
+        #gamesScreen {
+            display: none;
+        }
+        
+        .session-banner {
+            background: #16213e;
+            border: 2px solid #0f3460;
+            border-radius: 15px;
+            padding: 20px 25px;
+            margin-bottom: 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .session-info h2 {
+            color: #eec27e;
+            font-size: 1.3em;
+            margin-bottom: 5px;
+        }
+        
+        .session-code {
+            font-family: monospace;
+            font-size: 1.5em;
+            letter-spacing: 2px;
+        }
+        
+        .games-title {
+            color: #eec27e;
+            font-size: 1.8em;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .games-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+        }
+        
+        .game-card {
+            background: #16213e;
+            border: 2px solid #0f3460;
+            border-radius: 20px;
+            padding: 35px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        
+        .game-card:hover {
+            border-color: #eec27e;
+            transform: translateY(-8px);
+        }
+        
+        .game-icon {
+            font-size: 5em;
+            margin-bottom: 20px;
+        }
+        
+        .game-name {
+            font-size: 1.6em;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .game-desc {
+            color: #8b949e;
+            margin-bottom: 25px;
+        }
+        
+        .play-btn {
+            display: inline-block;
+            width: 100%;
+            padding: 18px;
+            background: #238636;
+            color: white;
+            text-decoration: none;
+            border-radius: 12px;
+            font-size: 1.2em;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .play-btn:hover {
+            background: #2ea043;
+        }
+        
+        #expiredScreen {
+            display: none;
+            text-align: center;
+            padding-top: 100px;
+        }
+        
+        .expired-icon {
+            font-size: 6em;
+            margin-bottom: 30px;
+        }
+        
+        .expired h2 {
+            color: #da3633;
+            font-size: 2.5em;
+            margin-bottom: 20px;
+        }
+        
+        .new-session-btn {
+            margin-top: 40px;
+            padding: 20px 50px;
+            font-size: 1.2em;
         }
     </style>
 </head>
 <body>
-    <div class="connection-status">
-        <span class="status-dot"></span>
-        <span>P2P Network Ready</span>
+    <div class="timer-bar" id="timerBar" style="display: none;">
+        <div class="label">Time Remaining</div>
+        <div id="timeDisplay">00:00</div>
     </div>
-
-    <div class="hub-header">
-        <h1>P2P ARCADE</h1>
-        <p class="subtitle">Play classic games directly with friends — no servers, no latency</p>
-        <div class="stats-bar">
-            <div class="stat-item">End-to-End Encrypted</div>
-            <div class="stat-item">Zero Installation</div>
-            <div class="stat-item">Cross-Platform</div>
+    
+    <div class="content">
+        <div id="loginScreen">
+            <div class="logo">☕</div>
+            <h1>Café Gaming</h1>
+            <p class="tagline">Enter your access code to start playing</p>
+            
+            <div class="login-box">
+                <div class="code-inputs">
+                    <input type="text" maxlength="1" id="c1" oninput="handleInput(1)" onkeydown="handleKey(1, event)">
+                    <input type="text" maxlength="1" id="c2" oninput="handleInput(2)" onkeydown="handleKey(2, event)">
+                    <input type="text" maxlength="1" id="c3" oninput="handleInput(3)" onkeydown="handleKey(3, event)">
+                    <input type="text" maxlength="1" id="c4" oninput="handleInput(4)" onkeydown="handleKey(4, event)">
+                    <input type="text" maxlength="1" id="c5" oninput="handleInput(5)" onkeydown="handleKey(5, event)">
+                    <input type="text" maxlength="1" id="c6" oninput="handleInput(6)" onkeydown="handleKey(6, event)">
+                </div>
+                
+                <button class="submit-btn" onclick="submitCode()">START PLAYING</button>
+                
+                <div class="error" id="errorMsg">
+                    ❌ Invalid or expired code. Ask staff for a new code.
+                </div>
+            </div>
+            
+            <p class="help">
+                💡 Code not working? Ask the café staff for help.
+            </p>
+        </div>
+        
+        <div id="gamesScreen">
+            <div class="session-banner">
+                <div class="session-info">
+                    <h2>Active Session</h2>
+                    <div class="session-code" id="displayCode">-------</div>
+                </div>
+            </div>
+            
+            <h2 class="games-title">Choose Your Game</h2>
+            
+            <div class="games-grid">
+                <div class="game-card">
+                    <span class="game-icon">🎱</span>
+                    <div class="game-name">Pool</div>
+                    <div class="game-desc">Classic 8-ball billiards</div>
+                    <button class="play-btn" onclick="openGame('pool.html')">PLAY NOW</button>
+                </div>
+                
+                <div class="game-card">
+                    <span class="game-icon">♟️</span>
+                    <div class="game-name">Chess</div>
+                    <div class="game-desc">Standard chess with FIDE rules</div>
+                    <button class="play-btn" onclick="openGame('chess.html')">PLAY NOW</button>
+                </div>
+                
+                <div class="game-card">
+                    <span class="game-icon">🔴</span>
+                    <div class="game-name">Checkers</div>
+                    <div class="game-desc">International checkers</div>
+                    <button class="play-btn" onclick="openGame('checkers.html')">PLAY NOW</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="expiredScreen">
+            <div class="expired-icon">⏰</div>
+            <h2>Time's Up!</h2>
+            <p>Your gaming session has ended.</p>
+            <p>Thank you for playing! ☕</p>
+            <button class="submit-btn new-session-btn" onclick="location.reload()">ENTER NEW CODE</button>
         </div>
     </div>
 
-    <div class="grid">
-        <!-- UNO - NEW GAME ADDED -->
-        <a href="uno.html" class="card">
-            <span class="card-icon">🃏</span>
-            <span class="badge new-badge">New</span>
-            <div class="card-title">Uno</div>
-            <div class="card-desc">Classic card game with Wild cards, Draw +4, and UNO challenges. First to empty hand wins!</div>
-            <div class="card-meta">
-                <span>🃏 108 Cards</span>
-                <span>⏱️ 5-15 min</span>
-            </div>
-        </a>
-
-        <a href="carrom.html" class="card">
-            <span class="card-icon">🎯</span>
-            <span class="badge new-badge">New</span>
-            <div class="card-title">Carrom</div>
-            <div class="card-desc">Precision board game with queen rules. Physics-based multiplayer with realistic striker mechanics.</div>
-            <div class="card-meta">
-                <span>🏆 9 Points</span>
-                <span>⏱️ 5-10 min</span>
-            </div>
-        </a>
-
-        <a href="pool.html" class="card">
-            <span class="card-icon">🎱</span>
-            <span class="badge hot-badge">Hot</span>
-            <div class="card-title">8-Ball Pool</div>
-            <div class="card-desc">Classic billiards with realistic physics. Sink the 8-ball last to win. Authoritative host sync.</div>
-            <div class="card-meta">
-                <span>🏆 8-Ball Rules</span>
-                <span>⏱️ 10-15 min</span>
-            </div>
-        </a>
-
-        <a href="chess.html" class="card">
-            <span class="card-icon">♟️</span>
-            <div class="card-title">Chess</div>
-            <div class="card-desc">Standard FIDE rules with move validation, check detection, and draw offers.</div>
-            <div class="card-meta">
-                <span>♟️ FIDE Rules</span>
-                <span>⏱️ 15+ min</span>
-            </div>
-        </a>
-
-        <a href="checkers.html" class="card">
-            <span class="card-icon">🏁</span>
-            <div class="card-title">Checkers</div>
-            <div class="card-desc">International draughts with forced captures, multi-jumps, and king promotion.</div>
-            <div class="card-meta">
-                <span>🏁 8×8 Board</span>
-                <span>⏱️ 5-10 min</span>
-            </div>
-        </a>
-
-        <a href="tictactoe.html" class="card">
-            <span class="card-icon">❌</span>
-            <div class="card-title">Tic-Tac-Toe</div>
-            <div class="card-desc">Instant classic for quick matches. Perfect for testing your connection.</div>
-            <div class="card-meta">
-                <span>⚡ Instant</span>
-                <span>⏱️ 1 min</span>
-            </div>
-        </a>
-    </div>
-
-    <footer>
-        <p>Built with PeerJS • Open Source • <span id="year">2025</span></p>
-    </footer>
-
     <script>
-        document.getElementById('year').textContent = new Date().getFullYear();
+        const STORAGE_KEY = 'cafe_sessions';
+        let currentSession = null;
+        let timerInterval = null;
+        
+        function handleInput(num) {
+            const input = document.getElementById('c' + num);
+            input.value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (input.value && num < 6) {
+                document.getElementById('c' + (num + 1)).focus();
+            }
+            if (num === 6 && input.value) {
+                setTimeout(submitCode, 100);
+            }
+        }
+        
+        function handleKey(num, e) {
+            if (e.key === 'Backspace' && !e.target.value && num > 1) {
+                document.getElementById('c' + (num - 1)).focus();
+            }
+        }
+        
+        function submitCode() {
+            const code = Array.from({length: 6}, (_, i) => document.getElementById('c' + (i+1)).value).join('').toUpperCase();
+            
+            if (code.length !== 6) return;
+            
+            // Try to get code from URL parameter (for QR scanning) or localStorage
+            const sessions = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            const session = sessions.find(s => s.code === code && s.expires > Date.now());
+            
+            if (!session) {
+                document.getElementById('errorMsg').style.display = 'block';
+                setTimeout(() => {
+                    for (let i = 1; i <= 6; i++) document.getElementById('c' + i).value = '';
+                    document.getElementById('c1').focus();
+                    document.getElementById('errorMsg').style.display = 'none';
+                }, 2000);
+                return;
+            }
+            
+            startSession(session);
+        }
+        
+        function startSession(session) {
+            currentSession = session;
+            
+            // Mark as used
+            const sessions = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            const idx = sessions.findIndex(s => s.code === session.code);
+            if (idx !== -1) {
+                sessions[idx].used = true;
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+            }
+            
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('gamesScreen').style.display = 'block';
+            document.getElementById('timerBar').style.display = 'block';
+            document.getElementById('displayCode').textContent = session.code;
+            
+            startTimer(session.expires);
+        }
+        
+        function startTimer(expiresAt) {
+            const bar = document.getElementById('timerBar');
+            const display = document.getElementById('timeDisplay');
+            
+            function update() {
+                const remaining = Math.max(0, expiresAt - Date.now());
+                const minutes = Math.floor(remaining / 60000);
+                const seconds = Math.floor((remaining % 60000) / 1000);
+                
+                display.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                
+                if (remaining < 300000 && remaining > 0) {
+                    bar.classList.add('warning');
+                }
+                
+                if (remaining <= 0) {
+                    clearInterval(timerInterval);
+                    document.getElementById('timerBar').classList.add('expired');
+                    document.getElementById('gamesScreen').style.display = 'none';
+                    document.getElementById('expiredScreen').style.display = 'block';
+                }
+            }
+            
+            update();
+            timerInterval = setInterval(update, 1000);
+        }
+        
+        function openGame(file) {
+            if (!currentSession || Date.now() > currentSession.expires) {
+                location.reload();
+                return;
+            }
+            window.open(file, '_blank');
+        }
+        
+        // Check for code in URL (for QR codes)
+        window.onload = () => {
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get('code');
+            if (code) {
+                // Fill inputs
+                for (let i = 0; i < 6; i++) {
+                    document.getElementById('c' + (i+1)).value = code[i] || '';
+                }
+                submitCode();
+            } else {
+                document.getElementById('c1').focus();
+            }
+        };
     </script>
 </body>
 </html>
